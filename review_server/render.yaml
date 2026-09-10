@@ -24,6 +24,15 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # Pin the Python version -- Render's unpinned default has drifted to
+      # 3.14, which is too new to have prebuilt wheels yet for pydantic-core
+      # (a Rust extension). Without a wheel, pip tries to compile it from
+      # source via maturin/cargo, which then fails outright in Render's build
+      # sandbox (its cargo registry cache dir is read-only there). 3.11 has
+      # full wheel coverage for every dependency here (pydantic-core,
+      # pyarrow, soundfile included).
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: HF_TOKEN
         sync: false
       - key: REVIEW_TOKEN

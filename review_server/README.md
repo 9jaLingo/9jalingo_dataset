@@ -44,6 +44,7 @@ this backend over HTTP — but there's no need to; this service serves it too.
 
 | var | required | meaning |
 |---|---|---|
+| `PYTHON_VERSION` | **required on Render** | set to `3.11.9`. Render's own default has drifted to a Python version too new to have prebuilt wheels yet for `pydantic-core` (a Rust extension); without one, pip tries to compile it from source and fails outright in Render's build sandbox. Not needed running locally with your own already-installed Python. |
 | `HF_TOKEN` | yes | needs **read + write** — write to push shards, read to fetch rows/audio from private or gated source datasets (e.g. Igbo) |
 | `REVIEW_TOKEN` | strongly recommended | shared secret the console sends as `X-Review-Token` (or `?token=` for the `<audio>` proxy, which can't set headers); unset = no auth, anyone with the URL can push shards or read your private datasets through it |
 | `TARGET_REPO_TEMPLATE` | no (defaults to `voicedata/9jalingo-reviewed-{language}`) | **set once** — every language automatically gets its own repo by substituting its key in for `{language}` (e.g. `voicedata/9jalingo-reviewed-pidgin`, `...-igbo`). Omit `{language}` entirely if you'd rather force everything into one shared repo. |
