@@ -1,0 +1,45 @@
+{
+  "_comment": "Shared config for review_console.html and review_server/. Add a language here and it appears in the console's dropdown with no code changes — no redeploy needed if this file is served alongside the HTML.",
+
+  "target_repo_template": "voicedata/9jalingo-reviewed-{language}",
+  "_target_repo_template_comment": "Informational only, for the label shown before the backend confirms it — the backend's own TARGET_REPO_TEMPLATE env var is the real source of truth (set once on Render; keep this in sync with it by hand). Each language gets its OWN repo, e.g. voicedata/9jalingo-reviewed-pidgin, voicedata/9jalingo-reviewed-igbo.",
+
+  "languages": {
+    "pidgin": {
+      "label": "Nigerian Pidgin",
+      "dataset": "voicedata/final_pidgin",
+      "config": "default",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "hausa": {
+      "label": "Hausa",
+      "dataset": "voicedata/final_hausa",
+      "config": "default",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio",
+      "_TODO": "confirm this is the real HF repo id, and whether it's private like igbo, before using"
+    },
+    "igbo": {
+      "label": "Igbo",
+      "dataset": "voicedata/final_igbo",
+      "config": "default",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio",
+      "private": true,
+      "_private_comment": "Private/gated source dataset — the console routes row+audio fetches through the backend (which holds an authenticated token) instead of calling Hugging Face directly from the browser. Requires a server URL to be set in the Sync panel; browsing this language with no backend configured will fail with a 401."
+    },
+    "yoruba": {
+      "label": "Yoruba",
+      "dataset": "voicedata/final_yoruba",
+      "config": "default",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio",
+      "_TODO": "confirm this is the real HF repo id, and whether it's private like igbo, before using"
+    }
+  }
+}

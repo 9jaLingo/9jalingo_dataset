@@ -1,0 +1,28 @@
+# Render blueprint for the review_console.html companion backend.
+# In the Render dashboard: New -> Blueprint -> point at this repo/path.
+# HF_TOKEN and REVIEW_TOKEN are marked sync:false -- set them by hand in the
+# Render dashboard's Environment tab, never commit real values here.
+#
+# This backend also SERVES the console itself (see main.py) -- once
+# deployed, the reviewer link for any language is just:
+#   https://<this-service>.onrender.com/review_console.html?lang=<key>
+# no separate static hosting required.
+services:
+  - type: web
+    name: 9jalingo-review-backend
+    runtime: python
+    plan: starter
+    rootDir: 9jalingo_dataset/review_server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HF_TOKEN
+        sync: false
+      - key: REVIEW_TOKEN
+        sync: false
+      - key: TARGET_REPO_TEMPLATE
+        value: voicedata/9jalingo-reviewed-{language}
+      - key: TARGET_REPO_PRIVATE
+        value: "false"
+      - key: ALLOWED_ORIGINS
+        value: "*"   # tighten to this service's own onrender.com URL once you know it, if you don't need other origins

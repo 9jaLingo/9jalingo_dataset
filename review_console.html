@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9jaLingo — dataset review console</title>
+<style>
+  :root{
+    --bg: #17181D;
+    --bg-raised: #1E2027;
+    --bg-row: #1B1C22;
+    --line: #2C2E37;
+    --line-soft: #24262E;
+    --text: #E7E4DC;
+    --text-dim: #A2A099;
+    --text-faint: #7A7889;
+    --amber: #D4A24E;
+    --amber-dim: #8C6E38;
+    --amber-ring: rgba(212,162,78,.30);
+    --teal: #6FA8A0;
+    --teal-tint: rgba(111,168,160,.10);
+    --red: #C0604A;
+    --red-tint: rgba(192,96,74,.10);
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  :root[data-theme="light"]{
+    --bg: #F7F5EF;
+    --bg-raised: #FFFFFF;
+    --bg-row: #FDFCF9;
+    --line: #E1DDD0;
+    --line-soft: #ECE8DC;
+    --text: #1E1C17;
+    --text-dim: #57544A;
+    --text-faint: #7C786A;
+    --amber: #A9762A;
+    --amber-dim: #D9B36C;
+    --amber-ring: rgba(169,118,42,.18);
+    --teal: #337067;
+    --teal-tint: rgba(51,112,103,.08);
+    --red: #A03D26;
+    --red-tint: rgba(160,61,38,.07);
+    --shadow: 0 1px 2px rgba(30,25,15,.07), 0 1px 1px rgba(30,25,15,.04);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh;transition:background .15s,color .15s;}
+  ::selection{background:var(--amber-ring);}
+
+  #app{max-width:1180px;margin:0 auto;padding:26px 20px 80px;}
+
+  /* thin brand accent so the page reads as "9jaLingo" at a glance */
+  .accent-bar{height:3px;background:linear-gradient(90deg, var(--amber), var(--teal));}
+
+  /* ---------- header ---------- */
+  .masthead{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:1px solid var(--line);padding-bottom:16px;margin:22px 0 20px;
+    flex-wrap:wrap;gap:14px;
+  }
+  .masthead h1{
+    font-size:22px;font-weight:650;margin:0 0 5px;letter-spacing:.1px;
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  }
+  .masthead h1 span.lang-name{color:var(--amber);}
+  .badge-private{
+    font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--red);
+    border:1px solid var(--red);border-radius:20px;padding:2px 9px;letter-spacing:.2px;
+  }
+  .masthead .sub{color:var(--text-dim);font-size:13px;}
+  .masthead .sub b{color:var(--text);font-weight:600;}
+  .masthead-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .stats-strip{
+    display:flex;gap:16px;font-family:var(--mono);font-size:12px;color:var(--text-dim);
+    flex-wrap:wrap;
+  }
+  .stats-strip .n{color:var(--amber);font-weight:700;}
+  .stats-strip .d{color:var(--red);font-weight:700;}
+  .stats-strip .e{color:var(--teal);font-weight:700;}
+
+  #themeToggle{
+    border-radius:20px;padding:6px 13px;font-family:var(--mono);font-size:12px;
+  }
+
+  .toolbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;margin-bottom:14px;flex-wrap:wrap;
+  }
+  .toolbar-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .toolbar-right{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+
+  button{
+    font-family:var(--sans);cursor:pointer;border:1px solid var(--line);
+    background:var(--bg-raised);color:var(--text);border-radius:6px;
+    padding:8px 14px;font-size:13px;font-weight:500;
+    transition:border-color .12s,background .12s,transform .06s,box-shadow .12s;
+  }
+  button:hover:not(:disabled){border-color:var(--amber-dim);box-shadow:var(--shadow);}
+  button:active:not(:disabled){transform:scale(.97);}
+  button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--amber-ring);}
+  button:disabled{opacity:.4;cursor:default;}
+  button.primary{background:var(--amber);color:#1a1200;border-color:var(--amber);font-weight:650;}
+  button.primary:hover:not(:disabled){background:#e0af5e;border-color:#e0af5e;}
+  button.ghost{background:transparent;}
+  button.danger-ghost{background:transparent;border-color:var(--line);color:var(--red);}
+  button.danger-ghost:hover:not(:disabled){border-color:var(--red);}
+  button.small{padding:5px 11px;font-size:12px;}
+
+  input[type=number], input[type=text], input[type=password]{
+    background:var(--bg-raised);border:1px solid var(--line);color:var(--text);
+    border-radius:6px;padding:7px 10px;font-family:var(--mono);font-size:13px;width:90px;
+    transition:border-color .12s,box-shadow .12s;
+  }
+  input:focus{outline:none;border-color:var(--amber-dim);box-shadow:0 0 0 3px var(--amber-ring);}
+  select{
+    background:var(--bg-raised);border:1px solid var(--line);color:var(--text);
+    border-radius:6px;padding:7px 10px;font-size:13px;font-family:var(--sans);cursor:pointer;
+    transition:border-color .12s,box-shadow .12s;
+  }
+  select:focus{outline:none;border-color:var(--amber-dim);box-shadow:0 0 0 3px var(--amber-ring);}
+  label.field{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-dim);}
+  input[type=checkbox]{accent-color:var(--amber);width:14px;height:14px;}
+
+  /* ---------- table ---------- */
+  .thead{
+    display:grid;
+    grid-template-columns: 54px 210px 1fr 190px 78px;
+    gap:14px;padding:9px 16px;color:var(--text-faint);
+    font-size:11px;text-transform:uppercase;letter-spacing:.7px;font-weight:600;
+    border-bottom:1px solid var(--line);
+  }
+  .rows{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg-row);box-shadow:var(--shadow);}
+  .row{
+    display:grid;
+    grid-template-columns: 54px 210px 1fr 190px 78px;
+    gap:14px;padding:13px 16px;border-bottom:1px solid var(--line-soft);
+    align-items:start;transition:background .1s;
+  }
+  .row:last-child{border-bottom:none;}
+  .row:hover{background:var(--bg-raised);}
+  .row.edited{box-shadow:inset 3px 0 0 var(--teal);background:var(--teal-tint);}
+  .row.edited:hover{background:var(--teal-tint);}
+  .row.deleted{box-shadow:inset 3px 0 0 var(--red);background:var(--red-tint);opacity:.55;}
+  .row.deleted:hover{background:var(--red-tint);}
+  .row.deleted textarea{text-decoration:line-through;}
+
+  .idx{font-family:var(--mono);font-size:12px;color:var(--text-faint);padding-top:7px;}
+  .idx b{color:var(--text-dim);display:block;font-size:12.5px;font-weight:600;}
+
+  .audio-cell audio{width:100%;height:32px;}
+  .audio-cell .audio-fallback{font-size:11px;color:var(--text-faint);padding:7px 0;}
+
+  textarea.text-edit{
+    width:100%;min-height:44px;resize:vertical;background:transparent;color:var(--text);
+    border:1px solid transparent;border-radius:5px;padding:7px 8px;font-family:var(--sans);
+    font-size:13.5px;line-height:1.45;
+  }
+  textarea.text-edit:focus{outline:none;border-color:var(--amber-dim);background:var(--bg-raised);box-shadow:0 0 0 3px var(--amber-ring);}
+  textarea.text-edit:hover{background:var(--bg-raised);}
+
+  .meta-cell{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start;padding-top:7px;}
+  .tag{
+    font-family:var(--mono);font-size:10.5px;color:var(--text-dim);background:var(--line-soft);
+    border:1px solid var(--line);border-radius:4px;padding:2px 7px;white-space:nowrap;
+  }
+
+  .action-cell{display:flex;flex-direction:column;gap:6px;padding-top:5px;}
+
+  .empty-note, .loading-note{
+    padding:44px 20px;text-align:center;color:var(--text-dim);font-size:13.5px;
+  }
+
+  /* ---------- pagination ---------- */
+  .pager{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:16px;gap:12px;flex-wrap:wrap;
+  }
+  .pager-mid{display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:13px;flex-wrap:wrap;}
+  .pager-mid form{display:flex;align-items:center;gap:6px;}
+  .pill-done{
+    font-family:var(--mono);font-size:11px;font-weight:600;color:var(--teal);border:1px solid var(--teal);
+    border-radius:20px;padding:2px 10px;background:var(--teal-tint);
+  }
+
+  /* ---------- panels ---------- */
+  .panel{
+    margin-top:24px;border:1px solid var(--line);border-radius:8px;
+    background:var(--bg-raised);padding:18px 20px;box-shadow:var(--shadow);
+  }
+  .panel h2{font-size:14.5px;margin:0 0 7px;color:var(--text);font-weight:650;}
+  .panel p{font-size:12.5px;color:var(--text-dim);line-height:1.6;margin:0 0 13px;max-width:780px;}
+  .panel p code{font-family:var(--mono);background:var(--bg-row);border:1px solid var(--line);border-radius:3px;padding:1.5px 5px;}
+  .panel .row-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;}
+  pre.snippet{
+    display:none;background:#101116;border:1px solid var(--line);border-radius:6px;
+    padding:14px;font-family:var(--mono);font-size:11.5px;line-height:1.6;color:#c9c7bd;
+    overflow-x:auto;margin-top:12px;white-space:pre;
+  }
+  pre.snippet.open{display:block;}
+
+  .toast{
+    position:fixed;bottom:18px;right:18px;background:var(--bg-raised);border:1px solid var(--amber-dim);
+    color:var(--text);padding:10px 15px;border-radius:6px;font-size:12.5px;font-family:var(--mono);
+    opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none;
+    max-width:70vw;box-shadow:var(--shadow);
+  }
+  .toast.show{opacity:1;transform:translateY(0);}
+
+  @media (max-width: 760px){
+    .thead{display:none;}
+    .row{grid-template-columns: 1fr;gap:9px;}
+    .idx{padding-top:0;}
+    .action-cell{flex-direction:row;}
+  }
+</style>
+</head>
+<body>
+<div class="accent-bar"></div>
+<div id="app">
+
+  <div class="masthead">
+    <div>
+      <h1><span class="lang-name" id="mastheadLang">—</span> — review console<span id="privateBadgeSlot"></span></h1>
+      <div class="sub" id="mastheadSub">loading…</div>
+    </div>
+    <div class="masthead-right">
+      <div class="stats-strip">
+        <span>rows total <span class="n" id="statTotal">—</span></span>
+        <span>edited <span class="e" id="statEdited">0</span></span>
+        <span>marked delete <span class="d" id="statDeleted">0</span></span>
+        <span>shards synced <span class="n" id="statShards">0</span></span>
+      </div>
+      <button class="ghost small" id="themeToggle" type="button" title="toggle light / dark">🌙 dark</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <label class="field">language <select id="langSelect"></select></label>
+      <span id="customLangFields" style="display:none;gap:6px;align-items:center;">
+        <input type="text" id="customDataset" placeholder="org/dataset-repo" style="width:180px;">
+        <input type="text" id="customConfig" placeholder="config" value="default" style="width:80px;">
+        <input type="text" id="customSplit" placeholder="split" value="train" style="width:70px;">
+        <button class="small" id="btnApplyCustom" type="button">use</button>
+      </span>
+    </div>
+    <div class="toolbar-right">
+      <label class="field"><input type="checkbox" id="hideDeleted"> hide deleted</label>
+      <label class="field"><input type="checkbox" id="onlyChanged"> only changed rows</label>
+    </div>
+  </div>
+
+  <div class="thead">
+    <div>#</div><div>audio</div><div>text</div><div>meta</div><div>actions</div>
+  </div>
+  <div class="rows" id="rowsContainer">
+    <div class="loading-note" id="loadingNote">loading rows…</div>
+  </div>
+
+  <div class="pager">
+    <div><button id="btnPrev2" class="ghost small">&larr; prev</button></div>
+    <div class="pager-mid">
+      <span id="pageLabel">—</span>
+      <span id="pageCommittedBadge"></span>
+      <form id="jumpForm">
+        <label class="field">row <input type="number" id="jumpInput" min="0" step="1" value="0"></label>
+        <button class="small" type="submit">go</button>
+      </form>
+    </div>
+    <div><button id="btnNext2" class="ghost small">next &rarr;</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>Sync this page to its repo</h2>
+    <p>
+      A completed page is written server-side as its own small parquet shard
+      (<code>data/train-OFFSET-OFFSET+99.parquet</code>) and pushed to
+      <b id="targetRepoLabel">—</b> — this language's own repo, so a review pass never
+      touches the original source dataset. This needs the companion backend in
+      <code>review_server/</code> running somewhere (see its README) — paste its URL below,
+      or open this console from the backend's own <code>/review_console.html</code> and it's
+      filled in automatically. Leave it blank to just use the manual export at the bottom instead.
+    </p>
+    <div class="row-actions">
+      <label class="field">server url <input type="text" id="serverUrlInput" placeholder="https://your-backend.onrender.com" style="width:280px;"></label>
+      <label class="field">token <input type="password" id="tokenInput" placeholder="shared secret (optional)" style="width:150px;"></label>
+      <button class="small ghost" id="btnSaveConn" type="button">save</button>
+    </div>
+    <div class="row-actions" style="margin-top:11px;">
+      <button class="primary small" id="btnCommitPage" type="button">commit this page &rarr;</button>
+      <button class="ghost small" id="btnResume" type="button">resume to next unfinished page</button>
+      <span id="syncStatus" style="font-size:12px;color:var(--text-dim);"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Manual export (no backend needed)</h2>
+    <p>
+      Works without any server: export your edits/deletes as a JSON manifest, then run the
+      matching Python script locally with your own write-scoped HF token.
+    </p>
+    <div class="row-actions">
+      <button class="small" id="btnExport">Export manifest (.json)</button>
+      <button class="ghost small" id="btnScript">Show apply-script (Python)</button>
+      <button class="danger-ghost small" id="btnClearAll">Clear all local edits (this language)</button>
+    </div>
+    <pre class="snippet" id="scriptSnippet"></pre>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  // ---------- config ----------
+  const DEFAULT_TARGET_REPO_TEMPLATE = "voicedata/9jalingo-reviewed-{language}";
+  const DEFAULT_LANGUAGES = {
+    pidgin: { label: "Nigerian Pidgin", dataset: "voicedata/final_pidgin", config: "default", split: "train", text_field: "text", audio_field: "audio" },
+    hausa:  { label: "Hausa",           dataset: "voicedata/final_hausa",  config: "default", split: "train", text_field: "text", audio_field: "audio" },
+    igbo:   { label: "Igbo",            dataset: "voicedata/final_igbo",   config: "default", split: "train", text_field: "text", audio_field: "audio", private: true },
+    yoruba: { label: "Yoruba",          dataset: "voicedata/final_yoruba", config: "default", split: "train", text_field: "text", audio_field: "audio" },
+  };
+  const PAGE_SIZE = 100;
+
+  let LANGUAGES = DEFAULT_LANGUAGES;
+  let TARGET_REPO_TEMPLATE = DEFAULT_TARGET_REPO_TEMPLATE;
+  let confirmedTargetRepo = null;   // exact value, once the backend has told us
+  let currentLang = null;           // { key, label, dataset, config, split, text_field, audio_field, private?, custom? }
+
+  let offset = 0;
+  let totalRows = null;
+  let currentRows = [];                          // rows currently rendered {row_idx, row}
+  let manifest = { edits: {}, deletes: {} };      // row_idx(string) -> text / true
+  let committedRanges = [];                       // [[lo, hi), ...] from the backend's progress file
+  let saveTimer = null;
+  let serverUrl = "";
+  let reviewToken = "";
+
+  const $ = (sel) => document.querySelector(sel);
+  const rowsContainer = $("#rowsContainer");
+  const loadingNote = $("#loadingNote");
+  const toastEl = $("#toast");
+
+  // ---------- theme ----------
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = $("#themeToggle");
+    if(btn) btn.textContent = theme === "light" ? "☀️ light" : "🌙 dark";
+  }
+
+  (function initTheme(){
+    let theme = null;
+    try{ theme = localStorage.getItem("review-theme"); }catch(e){}
+    if(theme !== "light" && theme !== "dark"){
+      theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    applyTheme(theme);
+  })();
+
+  $("#themeToggle").addEventListener("click", ()=>{
+    const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+    applyTheme(next);
+    try{ localStorage.setItem("review-theme", next); }catch(e){}
+  });
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(()=>toastEl.classList.remove("show"), 3200);
+  }
+
+  function escapeHtml(s){
+    return String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
+
+  // fetch() has no built-in timeout -- an unreachable/stalled server (e.g. a
+  // stale localhost URL saved from earlier testing) would otherwise hang
+  // this forever with no error, which is worse than just failing fast.
+  async function fetchWithTimeout(url, opts, timeoutMs){
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(), timeoutMs);
+    try{
+      return await fetch(url, { ...(opts||{}), signal: controller.signal });
+    }catch(e){
+      if(e.name === "AbortError") throw new Error(`timed out after ${timeoutMs}ms`);
+      throw e;
+    }finally{
+      clearTimeout(timer);
+    }
+  }
+
+  function apiHeaders(){
+    return reviewToken ? { "X-Review-Token": reviewToken } : {};
+  }
+
+  // ---------- language resolution ----------
+  function slugify(s){
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "custom";
+  }
+
+  function resolveLanguageFromUrl(){
+    const p = new URLSearchParams(location.search);
+    const customDataset = p.get("dataset");
+    if(customDataset){
+      return {
+        key: p.get("lang") || slugify(customDataset),
+        label: p.get("label") || customDataset,
+        dataset: customDataset,
+        config: p.get("config") || "default",
+        split: p.get("split") || "train",
+        text_field: p.get("text") || "text",
+        audio_field: p.get("audio") || "audio",
+        private: p.get("private") === "1",
+        custom: true,
+      };
+    }
+    const key = p.get("lang");
+    if(key && LANGUAGES[key]) return { key, ...LANGUAGES[key] };
+    const firstKey = Object.keys(LANGUAGES)[0];
+    return { key: firstKey, ...LANGUAGES[firstKey] };
+  }
+
+  function populateLangSelect(){
+    const sel = $("#langSelect");
+    sel.innerHTML = "";
+    for(const [key, l] of Object.entries(LANGUAGES)){
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = (l.label || key) + (l.private ? " 🔒" : "");
+      sel.appendChild(opt);
+    }
+    const customOpt = document.createElement("option");
+    customOpt.value = "__custom__";
+    customOpt.textContent = "custom dataset…";
+    sel.appendChild(customOpt);
+  }
+
+  function updateUrlAndSwitch(lang){
+    const p = new URLSearchParams();
+    if(lang.custom){
+      p.set("dataset", lang.dataset);
+      p.set("config", lang.config);
+      p.set("split", lang.split);
+      p.set("text", lang.text_field);
+      if(lang.audio_field !== "audio") p.set("audio", lang.audio_field);
+      if(lang.label) p.set("label", lang.label);
+      if(lang.private) p.set("private", "1");
+      p.set("lang", lang.key);
+    }else{
+      p.set("lang", lang.key);
+    }
+    history.pushState({}, "", "?" + p.toString());
+    switchLanguage(lang);
+  }
+
+  $("#langSelect").addEventListener("change", (e)=>{
+    const v = e.target.value;
+    if(v === "__custom__"){
+      $("#customLangFields").style.display = "flex";
+      return;
+    }
+    $("#customLangFields").style.display = "none";
+    updateUrlAndSwitch({ key: v, ...LANGUAGES[v] });
+  });
+
+  $("#btnApplyCustom").addEventListener("click", ()=>{
+    const dataset = $("#customDataset").value.trim();
+    if(!dataset){ toast("enter a dataset repo id first"); return; }
+    updateUrlAndSwitch({
+      key: slugify(dataset),
+      label: dataset,
+      dataset,
+      config: $("#customConfig").value.trim() || "default",
+      split: $("#customSplit").value.trim() || "train",
+      text_field: "text",
+      audio_field: "audio",
+      custom: true,
+    });
+  });
+
+  function guessedTargetRepo(lang){
+    return TARGET_REPO_TEMPLATE.replace("{language}", lang.key);
+  }
+
+  function renderMasthead(){
+    $("#mastheadLang").textContent = currentLang.label || currentLang.key;
+    $("#mastheadSub").innerHTML =
+      `<b>${escapeHtml(currentLang.dataset)}</b> · ${escapeHtml(currentLang.config)}/${escapeHtml(currentLang.split)} · ${PAGE_SIZE} rows/page`;
+    document.title = `${currentLang.label || currentLang.key} — review console`;
+    $("#privateBadgeSlot").innerHTML = currentLang.private ? ` <span class="badge-private" title="private/gated source dataset — needs the backend to browse">🔒 private</span>` : "";
+    $("#targetRepoLabel").textContent = confirmedTargetRepo || `${guessedTargetRepo(currentLang)} (unconfirmed)`;
+    const sel = $("#langSelect");
+    if(currentLang.custom){
+      sel.value = "__custom__";
+      $("#customLangFields").style.display = "flex";
+      $("#customDataset").value = currentLang.dataset;
+      $("#customConfig").value = currentLang.config;
+      $("#customSplit").value = currentLang.split;
+    }else{
+      sel.value = currentLang.key;
+      $("#customLangFields").style.display = "none";
+    }
+  }
+
+  // ---------- local manifest storage (per language, per dataset) ----------
+  function manifestStorageKey(lang){
+    return `review-manifest-v2::${lang.key}::${lang.dataset}::${lang.config}::${lang.split}`;
+  }
+
+  function loadManifestForCurrentLang(){
+    manifest = { edits: {}, deletes: {} };
+    try{
+      const raw = localStorage.getItem(manifestStorageKey(currentLang));
+      if(raw){
+        const parsed = JSON.parse(raw);
+        manifest.edits = parsed.edits || {};
+        manifest.deletes = parsed.deletes || {};
+      }else if(currentLang.key === "pidgin" && window.storage && window.storage.get){
+        // best-effort one-time import from the old artifact-storage-backed console,
+        // if this browser happens to still have access to it.
+        window.storage.get("pidgin-review-manifest-v1", false).then(res=>{
+          if(res && res.value){
+            try{
+              const parsed = JSON.parse(res.value);
+              manifest.edits = parsed.edits || {};
+              manifest.deletes = parsed.deletes || {};
+              scheduleSave();
+              updateStats();
+              renderRows();
+              toast("imported edits from the old pidgin console");
+            }catch(e){}
+          }
+        }).catch(()=>{});
+      }
+    }catch(e){
+      // localStorage unavailable (private mode etc.) — edits just won't persist across reloads
+    }
+    updateStats();
+  }
+
+  function scheduleSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>{
+      try{
+        localStorage.setItem(manifestStorageKey(currentLang), JSON.stringify(manifest));
+      }catch(e){
+        toast("local save failed: " + (e && e.message ? e.message : "unknown error"));
+      }
+    }, 400);
+  }
+
+  function updateStats(){
+    $("#statEdited").textContent = Object.keys(manifest.edits).length;
+    $("#statDeleted").textContent = Object.keys(manifest.deletes).length;
+    $("#statShards").textContent = committedRanges.length;
+  }
+
+  // ---------- server connection (shared across languages) ----------
+  function loadConnection(){
+    try{
+      serverUrl = localStorage.getItem("review-server-url") || "";
+      reviewToken = localStorage.getItem("review-token") || "";
+    }catch(e){}
+    // If this console was opened from a backend's own /review_console.html route
+    // (see review_server/main.py) and no server has been set yet, same-origin
+    // IS the backend -- fill it in rather than making the reviewer paste their
+    // own URL back to themselves.
+    if(!serverUrl && location.protocol.startsWith("http") && /(^|\/)review_console\.html$/.test(location.pathname)){
+      serverUrl = location.origin;
+      try{ localStorage.setItem("review-server-url", serverUrl); }catch(e){}
+    }
+    $("#serverUrlInput").value = serverUrl;
+    $("#tokenInput").value = reviewToken;
+  }
+
+  async function loadRemoteConfig(){
+    if(!serverUrl) return;
+    try{
+      const res = await fetchWithTimeout(serverUrl.replace(/\/$/, "") + "/api/config", undefined, 6000);
+      if(res.ok){
+        const data = await res.json();
+        if(data.target_repo_template) TARGET_REPO_TEMPLATE = data.target_repo_template;
+      }
+    }catch(e){
+      // backend unreachable -- keep whatever template languages.json (or the default) provided
+    }
+  }
+
+  $("#btnSaveConn").addEventListener("click", async ()=>{
+    serverUrl = $("#serverUrlInput").value.trim();
+    reviewToken = $("#tokenInput").value.trim();
+    try{
+      localStorage.setItem("review-server-url", serverUrl);
+      localStorage.setItem("review-token", reviewToken);
+    }catch(e){}
+    toast("connection saved");
+    await loadRemoteConfig();
+    renderMasthead();
+    refreshProgress();
+  });
+
+  async function refreshProgress(){
+    committedRanges = [];
+    confirmedTargetRepo = null;
+    if(!serverUrl){ updateStats(); renderPagerStatus(); renderMasthead(); return; }
+    try{
+      const res = await fetchWithTimeout(
+        serverUrl.replace(/\/$/, "") + `/api/progress?language=${encodeURIComponent(currentLang.key)}`,
+        { headers: apiHeaders() }, 6000
+      );
+      if(res.ok){
+        const data = await res.json();
+        committedRanges = data.committed_ranges || [];
+        if(data.target_repo) confirmedTargetRepo = data.target_repo;
+      }
+    }catch(e){
+      // backend unreachable — not fatal, sync panel just shows an unconfirmed guess
+    }
+    updateStats();
+    renderPagerStatus();
+    renderMasthead();
+  }
+
+  function isCurrentPageCommitted(){
+    // committedRanges are merged intervals now (a partial-overlap commit
+    // can widen an existing range rather than adding a same-size one), so
+    // "is this page done" means fully contained in some range, not an exact
+    // [lo,hi) match.
+    const hi = offset + currentRows.length;
+    return committedRanges.some(([lo, h]) => lo <= offset && h >= hi);
+  }
+
+  function renderPagerStatus(){
+    $("#pageCommittedBadge").innerHTML = isCurrentPageCommitted() ? `<span class="pill-done">✓ synced</span>` : "";
+  }
+
+  async function commitPage(){
+    if(!serverUrl){ toast("set a server url first (Sync panel)"); return; }
+    if(!currentRows.length){ toast("nothing on this page to commit"); return; }
+    const btn = $("#btnCommitPage");
+    btn.disabled = true;
+    $("#syncStatus").textContent = "committing…";
+    const edits = {};
+    const deletes = [];
+    for(const item of currentRows){
+      const idx = item.row_idx;
+      if(manifest.edits[idx] !== undefined) edits[idx] = manifest.edits[idx];
+      if(manifest.deletes[idx]) deletes.push(Number(idx));
+    }
+    try{
+      const res = await fetchWithTimeout(serverUrl.replace(/\/$/, "") + "/api/commit-page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...apiHeaders() },
+        body: JSON.stringify({
+          language: currentLang.key,
+          dataset: currentLang.dataset,
+          config: currentLang.config,
+          split: currentLang.split,
+          text_field: currentLang.text_field,
+          audio_field: currentLang.audio_field,
+          offset,
+          page_size: currentRows.length,
+          edits,
+          deletes,
+        }),
+      }, 180000); // shard upload (with audio) can genuinely take a while — 3 min, not 6s
+      const data = await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.detail || `server returned ${res.status}`);
+      // Re-fetch rather than locally guessing the new range -- the backend
+      // may have merged this into a wider existing interval, or written
+      // nothing at all if every row was a dupe/delete.
+      await refreshProgress();
+      const dupeNote = data.rows_skipped_duplicate ? `, ${data.rows_skipped_duplicate} already committed elsewhere (skipped)` : "";
+      $("#syncStatus").textContent = data.shard_path ? `synced: ${data.shard_path}` : "nothing new to write on this page";
+      toast(`shard committed — ${data.rows_edited} edits, ${data.rows_deleted} deletes${dupeNote}`);
+    }catch(err){
+      $("#syncStatus").textContent = "commit failed";
+      toast("commit failed: " + err.message);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+  $("#btnCommitPage").addEventListener("click", commitPage);
+
+  $("#btnResume").addEventListener("click", async ()=>{
+    if(!serverUrl){ toast("set a server url first"); return; }
+    await refreshProgress();
+    let candidate = 0;
+    const limit = totalRows ?? (candidate + PAGE_SIZE * 500); // sane bound if total unknown yet
+    while(candidate < limit){
+      const covered = committedRanges.some(([lo, hi]) => lo <= candidate && hi >= candidate + PAGE_SIZE);
+      if(!covered) break;
+      candidate += PAGE_SIZE;
+    }
+    goToOffset(candidate);
+  });
+
+  // ---------- fetching rows ----------
+  // `currentLang.private` (from languages.json) is a hint, not the ground truth --
+  // it lets a known-private language skip straight to the backend instead of
+  // wasting a doomed direct attempt. But if a language ISN'T flagged private
+  // and Hugging Face 401s/403s anyway (wrong guess, or a dataset's visibility
+  // changed), fall back to the backend automatically rather than requiring
+  // languages.json to be perfectly accurate for every language up front.
+  async function fetchViaBackend(params){
+    if(!serverUrl){
+      throw new Error(`${currentLang.label || currentLang.key} needs authentication to browse (private/gated dataset) — set a server url in the Sync panel first (its backend token can read it; the browser can't on its own)`);
+    }
+    const res = await fetchWithTimeout(
+      serverUrl.replace(/\/$/, "") + `/api/rows?${params}`,
+      { headers: apiHeaders() }, 20000
+    );
+    if(!res.ok){
+      const body = await res.text().catch(()=> "");
+      throw new Error(`backend /api/rows returned ${res.status}: ${body.slice(0,200)}`);
+    }
+    return res.json();
+  }
+
+  async function fetchPage(off){
+    const params = `dataset=${encodeURIComponent(currentLang.dataset)}&config=${encodeURIComponent(currentLang.config)}&split=${encodeURIComponent(currentLang.split)}&offset=${off}&length=${PAGE_SIZE}`;
+
+    if(currentLang.private){
+      return fetchViaBackend(params);
+    }
+
+    const url = `https://datasets-server.huggingface.co/rows?${params}`;
+    const res = await fetchWithTimeout(url, undefined, 20000);
+    if(res.ok) return res.json();
+    if(res.status === 401 || res.status === 403){
+      const data = await fetchViaBackend(params); // throws its own clear error if no server is set
+      currentLang.private = true; // remember for the rest of this session -- skip the wasted direct attempt on future pages
+      renderMasthead();
+      return data;
+    }
+    const body = await res.text().catch(()=> "");
+    throw new Error(`HF datasets-server returned ${res.status}: ${body.slice(0,200)}`);
+  }
+
+  function proxiedAssetUrl(rawUrl){
+    const t = reviewToken ? `&token=${encodeURIComponent(reviewToken)}` : "";
+    return `${serverUrl.replace(/\/$/, "")}/api/asset?url=${encodeURIComponent(rawUrl)}${t}`;
+  }
+
+  // Returns {raw, display} so the <audio> tag can fall back from `display`
+  // (direct HF url, the fast path) to a proxied one on a playback error --
+  // see the "error" listener wired up in renderRows.
+  function audioSrcInfo(r){
+    const val = r ? (r[currentLang.audio_field] ?? r.audio) : null;
+    if(!val) return null;
+    let raw = null;
+    if(Array.isArray(val) && val.length && val[0].src) raw = val[0].src;
+    else if(val.src) raw = val.src;
+    if(!raw) return null;
+    const display = (currentLang.private && serverUrl) ? proxiedAssetUrl(raw) : raw;
+    return { raw, display };
+  }
+
+  function metaTags(r){
+    const skip = new Set([currentLang.text_field, currentLang.audio_field, "audio", "row_idx"]);
+    const tags = [];
+    for(const [k, v] of Object.entries(r)){
+      if(skip.has(k) || v === null || v === undefined) continue;
+      const t = typeof v;
+      if(t !== "string" && t !== "number" && t !== "boolean") continue;
+      if(t === "string" && v.length > 40) continue;
+      tags.push(`<span class="tag">${escapeHtml(k)}: ${escapeHtml(v)}</span>`);
+      if(tags.length >= 6) break;
+    }
+    return tags.join("");
+  }
+
+  function renderRows(){
+    if(!currentRows.length){
+      rowsContainer.innerHTML = `<div class="empty-note">no rows in this range.</div>`;
+      return;
+    }
+    const hideDeleted = $("#hideDeleted").checked;
+    const onlyChanged = $("#onlyChanged").checked;
+
+    let html = "";
+    for(const item of currentRows){
+      const idx = item.row_idx;
+      const r = item.row || {};
+      const originalText = r[currentLang.text_field] ?? "";
+      const editEntry = manifest.edits[idx];
+      const isDeleted = !!manifest.deletes[idx];
+      const displayText = editEntry !== undefined ? editEntry : originalText;
+      const isEdited = editEntry !== undefined && editEntry !== originalText;
+
+      if(hideDeleted && isDeleted) continue;
+      if(onlyChanged && !isEdited && !isDeleted) continue;
+
+      const audioInfo = audioSrcInfo(r);
+      const rowClasses = ["row"];
+      if(isEdited) rowClasses.push("edited");
+      if(isDeleted) rowClasses.push("deleted");
+
+      html += `
+      <div class="${rowClasses.join(' ')}" data-idx="${idx}">
+        <div class="idx"><b>${idx}</b>row</div>
+        <div class="audio-cell">
+          ${audioInfo ? `<audio controls preload="none" src="${escapeHtml(audioInfo.display)}" data-raw-src="${escapeHtml(audioInfo.raw)}"></audio>` : `<div class="audio-fallback">no audio src</div>`}
+        </div>
+        <div>
+          <textarea class="text-edit" data-idx="${idx}" ${isDeleted ? "disabled" : ""} rows="2">${escapeHtml(displayText)}</textarea>
+        </div>
+        <div class="meta-cell">${metaTags(r)}</div>
+        <div class="action-cell">
+          ${isDeleted
+            ? `<button class="small ghost" data-action="restore" data-idx="${idx}">restore</button>`
+            : `<button class="small danger-ghost" data-action="delete" data-idx="${idx}">delete</button>`}
+          ${isEdited ? `<button class="small ghost" data-action="revert" data-idx="${idx}">revert text</button>` : ""}
+        </div>
+      </div>`;
+    }
+    rowsContainer.innerHTML = html || `<div class="empty-note">nothing matches the current filters on this page.</div>`;
+
+    rowsContainer.querySelectorAll("textarea.text-edit").forEach(ta=>{
+      ta.addEventListener("input", onTextEdit);
+    });
+    rowsContainer.querySelectorAll("button[data-action]").forEach(btn=>{
+      btn.addEventListener("click", onRowAction);
+    });
+    // A language not flagged `private` still gets its audio linked directly
+    // to Hugging Face (the fast path) -- if that 401s/403s on actual
+    // playback anyway, swap to the backend's authenticated proxy and retry,
+    // same auto-fallback idea as fetchPage above.
+    rowsContainer.querySelectorAll("audio[data-raw-src]").forEach(audioEl=>{
+      audioEl.addEventListener("error", ()=>{
+        if(audioEl.dataset.triedProxy || currentLang.private || !serverUrl) return;
+        audioEl.dataset.triedProxy = "1";
+        audioEl.src = proxiedAssetUrl(audioEl.dataset.rawSrc);
+        audioEl.load();
+      });
+    });
+  }
+
+  function onTextEdit(e){
+    const idx = e.target.dataset.idx;
+    const item = currentRows.find(r => String(r.row_idx) === String(idx));
+    const original = item ? (item.row[currentLang.text_field] ?? "") : "";
+    const val = e.target.value;
+    if(val === original){
+      delete manifest.edits[idx];
+    }else{
+      manifest.edits[idx] = val;
+    }
+    updateStats();
+    scheduleSave();
+    const rowEl = e.target.closest(".row");
+    if(rowEl) rowEl.classList.toggle("edited", val !== original);
+  }
+
+  function onRowAction(e){
+    const btn = e.currentTarget;
+    const idx = btn.dataset.idx;
+    const action = btn.dataset.action;
+    if(action === "delete"){
+      manifest.deletes[idx] = true;
+    }else if(action === "restore"){
+      delete manifest.deletes[idx];
+    }else if(action === "revert"){
+      delete manifest.edits[idx];
+    }
+    updateStats();
+    scheduleSave();
+    renderRows();
+  }
+
+  // ---------- pagination controls ----------
+  async function goToOffset(newOffset){
+    if(newOffset < 0) newOffset = 0;
+    offset = newOffset;
+    rowsContainer.innerHTML = "";
+    loadingNote.style.display = "block";
+    rowsContainer.appendChild(loadingNote);
+    $("#btnPrev2").disabled = offset <= 0;
+    try{
+      const data = await fetchPage(offset);
+      if(typeof data.num_rows_total === "number"){
+        totalRows = data.num_rows_total;
+        $("#statTotal").textContent = totalRows.toLocaleString();
+      }
+      currentRows = data.rows || [];
+      const lastIdx = offset + currentRows.length - 1;
+      $("#pageLabel").textContent = currentRows.length
+        ? `rows ${offset.toLocaleString()}–${lastIdx.toLocaleString()}${totalRows ? ` of ${totalRows.toLocaleString()}` : ""}`
+        : "no rows";
+      const atEnd = totalRows !== null && offset + PAGE_SIZE >= totalRows;
+      $("#btnNext2").disabled = atEnd && currentRows.length === 0;
+      $("#jumpInput").value = offset;
+      renderRows();
+      renderPagerStatus();
+    }catch(err){
+      rowsContainer.innerHTML = `<div class="empty-note">could not load this page — ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  $("#btnPrev2").addEventListener("click", ()=> goToOffset(offset - PAGE_SIZE));
+  $("#btnNext2").addEventListener("click", ()=> goToOffset(offset + PAGE_SIZE));
+  $("#jumpForm").addEventListener("submit", (e)=>{
+    e.preventDefault();
+    const v = parseInt($("#jumpInput").value, 10);
+    if(!isNaN(v)) goToOffset(v - (v % PAGE_SIZE));
+  });
+  $("#hideDeleted").addEventListener("change", renderRows);
+  $("#onlyChanged").addEventListener("change", renderRows);
+
+  // ---------- switching language ----------
+  async function switchLanguage(lang){
+    currentLang = lang;
+    offset = 0;
+    totalRows = null;
+    currentRows = [];
+    committedRanges = [];
+    confirmedTargetRepo = null;
+    renderMasthead();
+    loadManifestForCurrentLang();
+    // Run these concurrently, not sequentially -- rows must load even if the
+    // sync backend is slow, unreachable, or was never configured. refreshProgress
+    // has its own timeout+catch, so a bad server URL only delays the "synced"
+    // badges, never the page itself (except for `private` languages, where
+    // fetchPage itself needs the backend and says so clearly if it's missing).
+    await Promise.all([refreshProgress(), goToOffset(0)]);
+  }
+
+  // ---------- manual export ----------
+  function buildPySnippet(lang){
+    return `# apply_manifest.py
+# Applies the ${lang.label} review manifest and pushes the result back to the Hub.
+# pip install datasets huggingface_hub
+#
+# Run this locally / on a server you control. NEVER paste a write token into
+# the browser review console -- do the push here, offline, only.
+
+import json
+from datasets import load_dataset
+
+MANIFEST_PATH = "${lang.key}_review_manifest.json"
+
+# Where to publish the cleaned data. On your FIRST run, push to a staging
+# repo (e.g. "${lang.dataset}-staging") and spot-check it in the dataset
+# viewer before ever overwriting "${lang.dataset}" itself.
+TARGET_REPO = "${lang.dataset}-staging"
+HF_TOKEN = None  # or paste a write-scoped token here; better: run
+                 # \`huggingface-cli login\` once and leave this as None
+
+with open(MANIFEST_PATH) as f:
+    manifest = json.load(f)
+
+edit_by_idx = {e["row_idx"]: e["new_text"] for e in manifest["edits"]}
+delete_idx = set(manifest["deletes"])
+print(f"manifest: {len(edit_by_idx)} edits, {len(delete_idx)} deletes")
+
+ds = load_dataset(manifest["dataset"], manifest["config"], split=manifest["split"])
+print(f"loaded {len(ds)} rows from {manifest['dataset']}")
+
+def apply_row(example, idx):
+    if idx in edit_by_idx:
+        example["${lang.text_field}"] = edit_by_idx[idx]
+    return example
+
+ds = ds.map(apply_row, with_indices=True)
+ds = ds.select([i for i in range(len(ds)) if i not in delete_idx])
+print(f"{len(ds)} rows remain after deletes")
+
+# Uploads all shards -- audio bytes included; expect real upload time.
+ds.push_to_hub(TARGET_REPO, token=HF_TOKEN)
+print(f"pushed to https://huggingface.co/datasets/{TARGET_REPO}")
+
+# Once you've verified TARGET_REPO looks right in the Data Studio viewer,
+# either:
+#   a) repoint your training config at TARGET_REPO permanently, or
+#   b) re-run with TARGET_REPO = "${lang.dataset}" to overwrite the
+#      original -- this creates a new commit; the old version stays in the
+#      repo's commit history if you ever need to roll back.
+`;
+  }
+
+  $("#btnExport").addEventListener("click", ()=>{
+    const editList = Object.entries(manifest.edits).map(([idx, text])=>({ row_idx: Number(idx), new_text: text }));
+    const deleteList = Object.keys(manifest.deletes).map(Number).sort((a,b)=>a-b);
+    const payload = {
+      dataset: currentLang.dataset, config: currentLang.config, split: currentLang.split,
+      text_field: currentLang.text_field,
+      generated_at: new Date().toISOString(),
+      edit_count: editList.length,
+      delete_count: deleteList.length,
+      edits: editList,
+      deletes: deleteList,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentLang.key}_review_manifest.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast(`exported ${editList.length} edits, ${deleteList.length} deletes`);
+  });
+
+  $("#btnClearAll").addEventListener("click", ()=>{
+    if(!confirm(`Clear every locally saved edit and delete mark for ${currentLang.label}? This cannot be undone.`)) return;
+    manifest = { edits: {}, deletes: {} };
+    updateStats();
+    scheduleSave();
+    renderRows();
+  });
+
+  $("#btnScript").addEventListener("click", ()=>{
+    const el = $("#scriptSnippet");
+    if(!el.classList.contains("open")){
+      el.textContent = buildPySnippet(currentLang);
+      el.classList.add("open");
+    }else{
+      el.classList.remove("open");
+    }
+  });
+
+  // ---------- boot ----------
+  (async function init(){
+    try{
+      const res = await fetchWithTimeout("./languages.json", { cache: "no-store" }, 5000);
+      if(res.ok){
+        const cfg = await res.json();
+        if(cfg.languages) LANGUAGES = cfg.languages;
+        if(cfg.target_repo_template) TARGET_REPO_TEMPLATE = cfg.target_repo_template;
+      }
+    }catch(e){
+      // languages.json not reachable (e.g. opened as a bare file://) — fall back to defaults baked into this file
+    }
+    populateLangSelect();
+    loadConnection();
+    await loadRemoteConfig(); // prefer the backend's own template over languages.json's copy, if reachable
+    const lang = resolveLanguageFromUrl();
+    await switchLanguage(lang);
+  })();
+
+  window.addEventListener("popstate", async ()=>{
+    const lang = resolveLanguageFromUrl();
+    await switchLanguage(lang);
+  });
+})();
+</script>
+</body>
+</html>
