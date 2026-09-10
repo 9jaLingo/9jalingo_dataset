@@ -805,7 +805,7 @@
       <div class="${rowClasses.join(' ')}" data-idx="${idx}">
         <div class="idx"><b>${idx}</b>row</div>
         <div class="audio-cell">
-          ${audioInfo ? `<audio controls preload="none" src="${escapeHtml(audioInfo.display)}" data-raw-src="${escapeHtml(audioInfo.raw)}"></audio>` : `<div class="audio-fallback">no audio src</div>`}
+          ${audioInfo ? `<audio controls preload="metadata" src="${escapeHtml(audioInfo.display)}" data-raw-src="${escapeHtml(audioInfo.raw)}"></audio>` : `<div class="audio-fallback">no audio src</div>`}
         </div>
         <div>
           <textarea class="text-edit" data-idx="${idx}" ${isDeleted ? "disabled" : ""} rows="2">${escapeHtml(displayText)}</textarea>

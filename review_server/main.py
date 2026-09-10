@@ -61,9 +61,9 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError
 from pydantic import BaseModel
@@ -340,21 +340,45 @@ def get_rows(
 @app.get("/api/asset")
 def get_asset(
     url: str,
+    request: Request,
     x_review_token: Optional[str] = Header(default=None),
     token: Optional[str] = None,  # <audio src="..."> can't set headers, so also accept it as a query param
 ):
     """Authenticated audio fetch for a single row, for private/gated
     languages -- <audio src> is pointed at this instead of straight at
-    Hugging Face when review_console.html marks a language `private`."""
+    Hugging Face when review_console.html marks a language `private`.
+
+    Streams, and forwards the browser's Range header upstream (returning
+    whatever 206 Partial Content + Content-Range comes back) instead of
+    always fetching and returning the whole file -- without that, seeking
+    to anything beyond what's already buffered doesn't work, since the
+    browser's Range request would otherwise just get ignored and the same
+    full response sent again from the start."""
     _check_token(x_review_token, query_token=token)
     if not _is_hf_url(url):
         raise HTTPException(status_code=400, detail="url must point at huggingface.co / hf.co")
+
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    range_header = request.headers.get("range")
+    if range_header:
+        headers["Range"] = range_header
+
     try:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {HF_TOKEN}"}, timeout=60)
-        resp.raise_for_status()
+        upstream = requests.get(url, headers=headers, timeout=60, stream=True)
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail=f"failed to fetch asset: {e}")
-    return Response(content=resp.content, media_type=resp.headers.get("content-type", "application/octet-stream"))
+
+    passthrough_headers = {"accept-ranges": "bytes"}
+    for h in ("content-range", "content-length", "content-type"):
+        if h in upstream.headers:
+            passthrough_headers[h] = upstream.headers[h]
+
+    return StreamingResponse(
+        upstream.iter_content(chunk_size=65536),
+        status_code=upstream.status_code,  # 200 (no Range asked) or 206 (Partial Content)
+        headers=passthrough_headers,
+        media_type=upstream.headers.get("content-type", "application/octet-stream"),
+    )
 
 
 @app.get("/api/progress")
