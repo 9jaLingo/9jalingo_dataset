@@ -3,6 +3,14 @@
 # HF_TOKEN and REVIEW_TOKEN are marked sync:false -- set them by hand in the
 # Render dashboard's Environment tab, never commit real values here.
 #
+# NOTE on rootDir below: it's relative to the GITHUB REPO ROOT, not to
+# wherever this file happens to sit on disk. For the 9jaLingo/9jalingo_dataset
+# repo, that repo root IS the `9jalingo_dataset` folder -- this file lives at
+# review_server/render.yaml *within that repo*, so rootDir is just
+# "review_server". If you fork/move this into a repo whose root is one level
+# higher (containing 9jalingo_dataset/ as a subfolder), change this back to
+# "9jalingo_dataset/review_server".
+#
 # This backend also SERVES the console itself (see main.py) -- once
 # deployed, the reviewer link for any language is just:
 #   https://<this-service>.onrender.com/review_console.html?lang=<key>
@@ -12,7 +20,7 @@ services:
     name: 9jalingo-review-backend
     runtime: python
     plan: starter
-    rootDir: 9jalingo_dataset/review_server
+    rootDir: review_server
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
