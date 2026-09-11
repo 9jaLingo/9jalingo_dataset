@@ -1,7 +1,17 @@
 # Render blueprint for the review_console.html companion backend.
 # In the Render dashboard: New -> Blueprint -> point at this repo/path.
-# HF_TOKEN and REVIEW_TOKEN are marked sync:false -- set them by hand in the
-# Render dashboard's Environment tab, never commit real values here.
+# HF_TOKEN is marked sync:false -- set it by hand in the Render dashboard's
+# Environment tab, never commit a real value here.
+#
+# REVIEW_TOKEN is deliberately NOT set below, so this deploys with no gate
+# on who can call the backend -- the console's UI no longer has a field to
+# send one. That means ANYONE who has this service's URL can push shards to
+# your Hub repos and read your private/gated source datasets through
+# /api/rows and /api/asset. Acceptable if the URL itself stays unshared/
+# effectively private; if you ever do share it more widely, add a
+# REVIEW_TOKEN env var here (any random string) to lock it back down -- note
+# the current console build has no way to supply it, so re-enabling this
+# also means restoring the token field review_console.html had before.
 #
 # NOTE on rootDir below: it's relative to the GITHUB REPO ROOT, not to
 # wherever this file happens to sit on disk. For the 9jaLingo/9jalingo_dataset
@@ -34,8 +44,6 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: HF_TOKEN
-        sync: false
-      - key: REVIEW_TOKEN
         sync: false
       - key: TARGET_REPO_TEMPLATE
         value: voicedata/9jalingo-reviewed-{language}

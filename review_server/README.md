@@ -16,7 +16,6 @@ nothing else to host.
 cd 9jalingo_dataset/review_server
 pip install -r requirements.txt
 export HF_TOKEN=hf_xxx                                    # read+write on the Hub
-export REVIEW_TOKEN=some-secret                           # console must send this back in X-Review-Token
 export TARGET_REPO_TEMPLATE="voicedata/9jalingo-reviewed-{language}"
 uvicorn main:app --port 8787
 ```
@@ -24,14 +23,14 @@ uvicorn main:app --port 8787
 Open `http://127.0.0.1:8787/review_console.html?lang=pidgin`. In the Sync
 panel, the server URL defaults to same-origin automatically when the console
 is loaded from this backend's own `/review_console.html` route — nothing to
-paste in. Set the token to the same `REVIEW_TOKEN` value and hit "save".
+paste in or save.
 
 ## Deploy (Render, not Vercel)
 
 `render.yaml` in this folder is a ready-made Render blueprint (New ->
 Blueprint in the Render dashboard, point it at this repo). Set `HF_TOKEN`
-and `REVIEW_TOKEN` in the dashboard's Environment tab after creating it —
-they're deliberately left out of `render.yaml`.
+in the dashboard's Environment tab after creating it — it's deliberately
+left out of `render.yaml`.
 
 **Why not Vercel:** Vercel serverless functions have hard execution timeouts
 (10s free tier, 60s Pro). A 100-row shard with audio can take longer than
@@ -46,7 +45,7 @@ this backend over HTTP — but there's no need to; this service serves it too.
 |---|---|---|
 | `PYTHON_VERSION` | **required on Render** | set to `3.11.9`. Render's own default has drifted to a Python version too new to have prebuilt wheels yet for `pydantic-core` (a Rust extension); without one, pip tries to compile it from source and fails outright in Render's build sandbox. Not needed running locally with your own already-installed Python. |
 | `HF_TOKEN` | yes | needs **read + write** — write to push shards, read to fetch rows/audio from private or gated source datasets (e.g. Igbo) |
-| `REVIEW_TOKEN` | strongly recommended | shared secret the console sends as `X-Review-Token` (or `?token=` for the `<audio>` proxy, which can't set headers); unset = no auth, anyone with the URL can push shards or read your private datasets through it |
+| `REVIEW_TOKEN` | no (unset by default) | shared secret checked as `X-Review-Token` (or `?token=` for the `<audio>` proxy, which can't set headers). **Not set by default and not wired into the current console UI** — unset means no auth at all: anyone with this backend's URL can push shards and read your private datasets through it. Only re-add this if you also restore a way for the console to send it back (it used to have a token field). |
 | `TARGET_REPO_TEMPLATE` | no (defaults to `voicedata/9jalingo-reviewed-{language}`) | **set once** — every language automatically gets its own repo by substituting its key in for `{language}` (e.g. `voicedata/9jalingo-reviewed-pidgin`, `...-igbo`). Omit `{language}` entirely if you'd rather force everything into one shared repo. |
 | `TARGET_REPO_PRIVATE` | no (defaults `false`, i.e. public) | enforced on every `/api/progress`/`/api/commit-page` call, not just at creation — flips an already-existing repo's visibility to match if it drifted (e.g. from an earlier default) |
 | `ALLOWED_ORIGINS` | no (defaults `*`) | comma-separated CORS origins; only matters if you host the console at a *different* origin than this backend |
@@ -106,6 +105,16 @@ the browser — using `HF_TOKEN`'s own read access, the same account that
 already has read+write to that dataset. Requires a server URL to be
 configured in the console; browsing a `private` language with no backend
 set will fail fast with a clear message rather than a raw 401.
+
+## Note on access control
+
+This backend currently has **no auth of its own** (`REVIEW_TOKEN` unset by
+default, and the console has no field to send one even if you set it) — the
+only thing standing between "anyone with the URL" and "push shards / read
+private datasets through this service" is the URL itself not being shared
+publicly. Fine for a small trusted group using an unlisted Render URL;
+worth revisiting (see `REVIEW_TOKEN` above, or a Render-level access
+control) before handing the link to a wider audience.
 
 ## Concurrency
 

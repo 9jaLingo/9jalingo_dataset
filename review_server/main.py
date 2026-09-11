@@ -85,9 +85,15 @@ _CONSOLE_DIR = Path(__file__).resolve().parent.parent
 if not HF_TOKEN:
     raise RuntimeError("HF_TOKEN env var is required (needs read+write scope on the Hub)")
 if not REVIEW_TOKEN:
+    # TODO before any public/wider release: set REVIEW_TOKEN here AND restore a
+    # way for review_console.html to send it (it had a token field until this
+    # was intentionally dropped for internal-only use -- see git history /
+    # conversation around the date below). Until then, this backend's URL
+    # alone is the only thing gating who can push shards or read private
+    # datasets through it.
     print("WARNING: REVIEW_TOKEN is not set -- anyone who finds this server's URL can push shards "
-          "and read your private datasets through it. Fine for localhost-only use; set REVIEW_TOKEN "
-          "before deploying publicly.")
+          "and read your private datasets through it. Deliberately fine for internal-only use as of "
+          "2026-09-11; revisit before this backend's URL is ever shared publicly.")
 
 api = HfApi(token=HF_TOKEN)
 app = FastAPI(title="9jaLingo review-console backend")
