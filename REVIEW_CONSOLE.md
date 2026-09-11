@@ -85,6 +85,14 @@ for a 100-row audio shard upload.
 
 ## What's still manual / not yet done
 
+- **Before this backend's URL is ever shared beyond the internal team:**
+  re-add access control. As of 2026-09-11 it's deliberately unauthenticated
+  (`REVIEW_TOKEN` unset, and `review_console.html` has no field to send one
+  — both removed intentionally for frictionless internal use) — anyone with
+  the URL can push shards or read private datasets through it. Fixing this
+  means setting `REVIEW_TOKEN` again on the backend AND restoring a way for
+  the console to send it back (it used to have a token input in the Sync
+  panel). See the `REVIEW_TOKEN` row in `review_server/README.md`.
 - The `hausa`/`yoruba` repo ids in `languages.json` are placeholders —
   verify the real HF dataset repo id (and private/gated status) for each
   before pointing reviewers at them.

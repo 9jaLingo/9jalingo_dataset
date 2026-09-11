@@ -148,8 +148,41 @@
   .idx{font-family:var(--mono);font-size:12px;color:var(--text-faint);padding-top:7px;}
   .idx b{color:var(--text-dim);display:block;font-size:12.5px;font-weight:600;}
 
-  .audio-cell audio{width:100%;height:32px;}
   .audio-cell .audio-fallback{font-size:11px;color:var(--text-faint);padding:7px 0;}
+
+  /* ---------- custom audio player (native <audio controls> renders its seek
+     bar too small/ambiguous in most browsers -- build a bigger one instead) */
+  .player{display:flex;align-items:center;gap:8px;}
+  .player-btn{
+    flex:0 0 auto;width:28px;height:28px;padding:0;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-size:12px;
+    background:var(--bg-row);border-color:var(--line);
+  }
+  .player-btn svg{width:11px;height:11px;fill:var(--text);}
+  .player-seek-wrap{flex:1 1 auto;display:flex;flex-direction:column;gap:3px;min-width:0;}
+  input.player-seek{
+    -webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;
+    margin:0;cursor:pointer;
+  }
+  input.player-seek::-webkit-slider-runnable-track{
+    height:5px;border-radius:3px;background:var(--line);
+  }
+  input.player-seek::-moz-range-track{
+    height:5px;border-radius:3px;background:var(--line);
+  }
+  input.player-seek::-webkit-slider-thumb{
+    -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--amber);border:2px solid var(--bg-raised);margin-top:-4.5px;
+    box-shadow:0 0 0 1px var(--amber-dim);
+  }
+  input.player-seek::-moz-range-thumb{
+    width:14px;height:14px;border-radius:50%;border:2px solid var(--bg-raised);
+    background:var(--amber);box-shadow:0 0 0 1px var(--amber-dim);
+  }
+  input.player-seek:focus{outline:none;}
+  input.player-seek:focus::-webkit-slider-thumb{box-shadow:0 0 0 3px var(--amber-ring);}
+  input.player-seek:disabled{cursor:default;opacity:.5;}
+  .player-time{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
 
   textarea.text-edit{
     width:100%;min-height:44px;resize:vertical;background:transparent;color:var(--text);
@@ -284,8 +317,6 @@
     </p>
     <div class="row-actions">
       <label class="field">server url <input type="text" id="serverUrlInput" placeholder="https://your-backend.onrender.com" style="width:280px;"></label>
-      <label class="field">token <input type="password" id="tokenInput" placeholder="shared secret (optional)" style="width:150px;"></label>
-      <button class="small ghost" id="btnSaveConn" type="button">save</button>
     </div>
     <div class="row-actions" style="margin-top:11px;">
       <button class="primary small" id="btnCommitPage" type="button">commit this page &rarr;</button>
@@ -323,6 +354,8 @@
     yoruba: { label: "Yoruba",          dataset: "voicedata/final_yoruba", config: "default", split: "train", text_field: "text", audio_field: "audio" },
   };
   const PAGE_SIZE = 100;
+  const ICON_PLAY = `<svg viewBox="0 0 12 12"><polygon points="1,0 11,6 1,12"></polygon></svg>`;
+  const ICON_PAUSE = `<svg viewBox="0 0 12 12"><rect x="1" y="0" width="3.4" height="12"></rect><rect x="7.6" y="0" width="3.4" height="12"></rect></svg>`;
 
   let LANGUAGES = DEFAULT_LANGUAGES;
   let TARGET_REPO_TEMPLATE = DEFAULT_TARGET_REPO_TEMPLATE;
@@ -336,7 +369,6 @@
   let committedRanges = [];                       // [[lo, hi), ...] from the backend's progress file
   let saveTimer = null;
   let serverUrl = "";
-  let reviewToken = "";
 
   const $ = (sel) => document.querySelector(sel);
   const rowsContainer = $("#rowsContainer");
@@ -395,7 +427,9 @@
   }
 
   function apiHeaders(){
-    return reviewToken ? { "X-Review-Token": reviewToken } : {};
+    // No token sent from the UI -- the backend only enforces X-Review-Token
+    // when REVIEW_TOKEN is set as an env var there; leave it unset to match.
+    return {};
   }
 
   // ---------- language resolution ----------
@@ -564,7 +598,6 @@
   function loadConnection(){
     try{
       serverUrl = localStorage.getItem("review-server-url") || "";
-      reviewToken = localStorage.getItem("review-token") || "";
     }catch(e){}
     // If this console was opened from a backend's own /review_console.html route
     // (see review_server/main.py) and no server has been set yet, same-origin
@@ -575,7 +608,6 @@
       try{ localStorage.setItem("review-server-url", serverUrl); }catch(e){}
     }
     $("#serverUrlInput").value = serverUrl;
-    $("#tokenInput").value = reviewToken;
   }
 
   async function loadRemoteConfig(){
@@ -591,14 +623,13 @@
     }
   }
 
-  $("#btnSaveConn").addEventListener("click", async ()=>{
-    serverUrl = $("#serverUrlInput").value.trim();
-    reviewToken = $("#tokenInput").value.trim();
+  // Auto-saves as soon as focus leaves the field -- no separate save step.
+  $("#serverUrlInput").addEventListener("change", async (e)=>{
+    serverUrl = e.target.value.trim();
     try{
       localStorage.setItem("review-server-url", serverUrl);
-      localStorage.setItem("review-token", reviewToken);
     }catch(e){}
-    toast("connection saved");
+    if(serverUrl) toast("connected: " + serverUrl);
     await loadRemoteConfig();
     renderMasthead();
     refreshProgress();
@@ -713,7 +744,7 @@
     }
     const res = await fetchWithTimeout(
       serverUrl.replace(/\/$/, "") + `/api/rows?${params}`,
-      { headers: apiHeaders() }, 20000
+      { headers: apiHeaders() }, 180000
     );
     if(!res.ok){
       const body = await res.text().catch(()=> "");
@@ -730,7 +761,7 @@
     }
 
     const url = `https://datasets-server.huggingface.co/rows?${params}`;
-    const res = await fetchWithTimeout(url, undefined, 20000);
+    const res = await fetchWithTimeout(url, undefined, 180000);
     if(res.ok) return res.json();
     if(res.status === 401 || res.status === 403){
       const data = await fetchViaBackend(params); // throws its own clear error if no server is set
@@ -743,8 +774,7 @@
   }
 
   function proxiedAssetUrl(rawUrl){
-    const t = reviewToken ? `&token=${encodeURIComponent(reviewToken)}` : "";
-    return `${serverUrl.replace(/\/$/, "")}/api/asset?url=${encodeURIComponent(rawUrl)}${t}`;
+    return `${serverUrl.replace(/\/$/, "")}/api/asset?url=${encodeURIComponent(rawUrl)}`;
   }
 
   // Returns {raw, display} so the <audio> tag can fall back from `display`
@@ -805,7 +835,15 @@
       <div class="${rowClasses.join(' ')}" data-idx="${idx}">
         <div class="idx"><b>${idx}</b>row</div>
         <div class="audio-cell">
-          ${audioInfo ? `<audio controls preload="metadata" src="${escapeHtml(audioInfo.display)}" data-raw-src="${escapeHtml(audioInfo.raw)}"></audio>` : `<div class="audio-fallback">no audio src</div>`}
+          ${audioInfo ? `
+          <div class="player">
+            <audio preload="metadata" style="display:none;" src="${escapeHtml(audioInfo.display)}" data-raw-src="${escapeHtml(audioInfo.raw)}"></audio>
+            <button class="player-btn" type="button" data-role="playpause" aria-label="play">${ICON_PLAY}</button>
+            <div class="player-seek-wrap">
+              <input type="range" class="player-seek" data-role="seek" min="0" max="0" value="0" step="0.01" disabled>
+              <span class="player-time" data-role="time">0:00 / 0:00</span>
+            </div>
+          </div>` : `<div class="audio-fallback">no audio src</div>`}
         </div>
         <div>
           <textarea class="text-edit" data-idx="${idx}" ${isDeleted ? "disabled" : ""} rows="2">${escapeHtml(displayText)}</textarea>
@@ -839,6 +877,57 @@
         audioEl.load();
       });
     });
+    rowsContainer.querySelectorAll(".player").forEach(wirePlayer);
+  }
+
+  function formatSeconds(s){
+    if(!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  }
+
+  // Custom transport for one row's clip -- native <audio controls> renders
+  // its seek bar too small/ambiguous (looks like the volume slider) in most
+  // browsers, so the markup carries a bare <audio> (no `controls`) plus our
+  // own play button + <input type=range> seek bar, wired up here.
+  function wirePlayer(playerEl){
+    const audioEl = playerEl.querySelector("audio");
+    const btn = playerEl.querySelector('[data-role="playpause"]');
+    const seek = playerEl.querySelector('[data-role="seek"]');
+    const timeEl = playerEl.querySelector('[data-role="time"]');
+    if(!audioEl || !btn || !seek || !timeEl) return;
+
+    function updateTime(){
+      timeEl.textContent = `${formatSeconds(audioEl.currentTime)} / ${formatSeconds(audioEl.duration)}`;
+    }
+    function enableSeekIfReady(){
+      if(isFinite(audioEl.duration) && audioEl.duration > 0){
+        seek.max = audioEl.duration;
+        seek.disabled = false;
+      }
+      updateTime();
+    }
+
+    audioEl.addEventListener("loadedmetadata", enableSeekIfReady);
+    audioEl.addEventListener("durationchange", enableSeekIfReady);
+    audioEl.addEventListener("timeupdate", ()=>{
+      if(!seek.dataset.dragging) seek.value = audioEl.currentTime;
+      updateTime();
+    });
+    audioEl.addEventListener("play", ()=>{ btn.innerHTML = ICON_PAUSE; btn.setAttribute("aria-label", "pause"); });
+    audioEl.addEventListener("pause", ()=>{ btn.innerHTML = ICON_PLAY; btn.setAttribute("aria-label", "play"); });
+    audioEl.addEventListener("ended", ()=>{ btn.innerHTML = ICON_PLAY; btn.setAttribute("aria-label", "play"); });
+
+    btn.addEventListener("click", ()=>{
+      if(audioEl.paused) audioEl.play().catch(()=>{}); else audioEl.pause();
+    });
+    seek.addEventListener("input", ()=>{
+      seek.dataset.dragging = "1";
+      audioEl.currentTime = Number(seek.value);
+      timeEl.textContent = `${formatSeconds(Number(seek.value))} / ${formatSeconds(audioEl.duration)}`;
+    });
+    seek.addEventListener("change", ()=>{ delete seek.dataset.dragging; });
   }
 
   function onTextEdit(e){
