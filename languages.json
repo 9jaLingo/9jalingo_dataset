@@ -3,6 +3,7 @@
 
   "target_repo_template": "voicedata/9jalingo-reviewed-{language}",
   "_target_repo_template_comment": "Informational only, for the label shown before the backend confirms it — the backend's own TARGET_REPO_TEMPLATE env var is the real source of truth (set once on Render; keep this in sync with it by hand). Each language gets its OWN repo, e.g. voicedata/9jalingo-reviewed-pidgin, voicedata/9jalingo-reviewed-igbo.",
+  "_comment_naijavoices": "hausa-batch-0/1/2 below are a DIFFERENT source dataset from `hausa` above (naijavoices/naijavoices-dataset, not voicedata/final_hausa) that has multiple SUBSETS -- HF's dataset-viewer calls this the 'Subset' dropdown; our `config` field is the same thing. Each subset gets its own key -> its own reviewed-output repo via TARGET_REPO_TEMPLATE, e.g. voicedata/9jalingo-reviewed-hausa-batch-0.",
 
   "languages": {
     "pidgin": {
@@ -40,6 +41,81 @@
       "text_field": "text",
       "audio_field": "audio",
       "_TODO": "confirm this is the real HF repo id, and whether it's private like igbo, before using"
+    },
+
+    "hausa-batch-0": {
+      "label": "Hausa (NaijaVoices batch 0)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "hausa-batch-0",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "hausa-batch-1": {
+      "label": "Hausa (NaijaVoices batch 1)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "hausa-batch-1",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "hausa-batch-2": {
+      "label": "Hausa (NaijaVoices batch 2)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "hausa-batch-2",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    
+    "yoruba-batch-0": {
+      "label": "Yoruba (NaijaVoices batch 0)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "yoruba-batch-0",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "yoruba-batch-1": {
+      "label": "Yoruba (NaijaVoices batch 1)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "yoruba-batch-1",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "yoruba-batch-2": {
+      "label": "Yoruba (NaijaVoices batch 2)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "yoruba-batch-2",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "igbo-batch-0": {
+      "label": "Igbo (NaijaVoices batch 0)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "igbo-batch-0",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "igbo-batch-1": {
+      "label": "Igbo (NaijaVoices batch 1)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "igbo-batch-1",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
+    },
+    "igbo-batch-2": {
+      "label": "Igbo (NaijaVoices batch 2)",
+      "dataset": "naijavoices/naijavoices-dataset",
+      "config": "igbo-batch-2",
+      "split": "train",
+      "text_field": "text",
+      "audio_field": "audio"
     }
+    
   }
 }

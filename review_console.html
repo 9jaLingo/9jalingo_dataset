@@ -184,13 +184,24 @@
   input.player-seek:disabled{cursor:default;opacity:.5;}
   .player-time{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);}
 
+  .text-edit-wrap{position:relative;}
   textarea.text-edit{
-    width:100%;min-height:44px;resize:vertical;background:transparent;color:var(--text);
-    border:1px solid transparent;border-radius:5px;padding:7px 8px;font-family:var(--sans);
+    width:100%;min-height:44px;resize:vertical;background:var(--bg-raised);color:var(--text);
+    border:1px solid var(--line);border-radius:5px;padding:7px 26px 7px 8px;font-family:var(--sans);
     font-size:13.5px;line-height:1.45;
   }
-  textarea.text-edit:focus{outline:none;border-color:var(--amber-dim);background:var(--bg-raised);box-shadow:0 0 0 3px var(--amber-ring);}
-  textarea.text-edit:hover{background:var(--bg-raised);}
+  textarea.text-edit:focus{outline:none;border-color:var(--amber-dim);box-shadow:0 0 0 3px var(--amber-ring);}
+  textarea.text-edit:hover{border-color:var(--amber-dim);}
+  textarea.text-edit:disabled{background:transparent;border-color:transparent;padding-right:8px;}
+  /* Pencil hint so an unedited row still visibly reads as "editable text
+     field", not plain text -- new reviewers otherwise have no cue to click
+     into it. Fades out once actually focused, since the border+ring above
+     take over as the "you're editing this" signal at that point. */
+  .edit-hint{
+    position:absolute;top:8px;right:9px;font-size:11px;color:var(--text-faint);
+    pointer-events:none;
+  }
+  textarea.text-edit:focus + .edit-hint{opacity:0;}
 
   .meta-cell{display:flex;flex-wrap:wrap;gap:5px;align-items:flex-start;padding-top:7px;}
   .tag{
@@ -285,7 +296,7 @@
   </div>
 
   <div class="thead">
-    <div>#</div><div>audio</div><div>text</div><div>meta</div><div>actions</div>
+    <div>#</div><div>audio</div><div>text (click to edit)</div><div>meta</div><div>actions</div>
   </div>
   <div class="rows" id="rowsContainer">
     <div class="loading-note" id="loadingNote">loading rows…</div>
@@ -437,15 +448,26 @@
     return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "custom";
   }
 
+  // A dataset "config" is what HF's own UI calls a subset (e.g. a dataset
+  // viewer subset dropdown showing hausa-batch-0/1/2 against ONE repo id).
+  // The output repo is keyed off `language`, via TARGET_REPO_TEMPLATE -- so
+  // when a custom dataset entry has a real (non-"default") config, that
+  // config has to drive the key, or every subset of the same source dataset
+  // would collide into the same output repo.
+  function keyFor(dataset, config){
+    return slugify(config && config !== "default" ? config : dataset);
+  }
+
   function resolveLanguageFromUrl(){
     const p = new URLSearchParams(location.search);
     const customDataset = p.get("dataset");
     if(customDataset){
+      const config = p.get("config") || "default";
       return {
-        key: p.get("lang") || slugify(customDataset),
+        key: p.get("lang") || keyFor(customDataset, config),
         label: p.get("label") || customDataset,
         dataset: customDataset,
-        config: p.get("config") || "default",
+        config,
         split: p.get("split") || "train",
         text_field: p.get("text") || "text",
         audio_field: p.get("audio") || "audio",
@@ -463,6 +485,7 @@
     const sel = $("#langSelect");
     sel.innerHTML = "";
     for(const [key, l] of Object.entries(LANGUAGES)){
+      if(key.startsWith("_") || !l || typeof l !== "object") continue; // e.g. a stray "_comment" key in languages.json
       const opt = document.createElement("option");
       opt.value = key;
       opt.textContent = (l.label || key) + (l.private ? " 🔒" : "");
@@ -505,11 +528,12 @@
   $("#btnApplyCustom").addEventListener("click", ()=>{
     const dataset = $("#customDataset").value.trim();
     if(!dataset){ toast("enter a dataset repo id first"); return; }
+    const config = $("#customConfig").value.trim() || "default";
     updateUrlAndSwitch({
-      key: slugify(dataset),
-      label: dataset,
+      key: keyFor(dataset, config),
+      label: config !== "default" ? `${dataset} · ${config}` : dataset,
       dataset,
-      config: $("#customConfig").value.trim() || "default",
+      config,
       split: $("#customSplit").value.trim() || "train",
       text_field: "text",
       audio_field: "audio",
@@ -845,8 +869,9 @@
             </div>
           </div>` : `<div class="audio-fallback">no audio src</div>`}
         </div>
-        <div>
+        <div class="text-edit-wrap">
           <textarea class="text-edit" data-idx="${idx}" ${isDeleted ? "disabled" : ""} rows="2">${escapeHtml(displayText)}</textarea>
+          ${isDeleted ? "" : `<span class="edit-hint" title="click to edit">✎</span>`}
         </div>
         <div class="meta-cell">${metaTags(r)}</div>
         <div class="action-cell">
