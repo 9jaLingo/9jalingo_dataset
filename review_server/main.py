@@ -55,6 +55,7 @@ import io
 import json
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
@@ -75,6 +76,7 @@ TARGET_REPO_PRIVATE = os.environ.get("TARGET_REPO_PRIVATE", "false").lower() == 
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",")]
 
 HF_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+HF_ROWS_MAX_LENGTH = 100  # datasets-server caps a single call's `length` at 100 regardless of what's requested
 HF_INFO_URL = "https://datasets-server.huggingface.co/info"
 _HF_ASSET_HOSTS = ("huggingface.co", "hf.co")
 
@@ -213,21 +215,79 @@ def _write_progress(repo_id: str, language: str, progress: dict):
 # ---------- cheap, authenticated, random-access row/asset fetching ----------
 # (no full-dataset download -- see module docstring for why that matters)
 
+def _fetch_rows_page(dataset: str, config: str, split: str, offset: int, length: int, retries: int = 2) -> dict:
+    """One datasets-server /rows call, authenticated. Never returns more than
+    HF_ROWS_MAX_LENGTH rows regardless of `length` -- callers needing more
+    than that use _fetch_rows_json below, which chunks.
+
+    datasets-server can be genuinely slow (not hung) on some dataset/subset
+    combos, especially gated ones needing an access check -- 30s was too
+    tight and turned ordinary slowness into a hard failure. 60s, plus a
+    couple of quick retries on read-timeout/connection errors specifically
+    (not on a real 4xx from HF, which retrying won't fix)."""
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(
+                HF_ROWS_URL,
+                params={"dataset": dataset, "config": config, "split": split, "offset": offset, "length": length},
+                headers={"Authorization": f"Bearer {HF_TOKEN}"},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(0.75 * (attempt + 1))
+                continue
+        except requests.RequestException as e:
+            # A real HTTP error status (4xx/5xx) from HF -- retrying won't help.
+            raise HTTPException(status_code=502, detail=f"datasets-server /rows failed: {e}")
+    raise HTTPException(status_code=502, detail=f"datasets-server /rows failed after {retries + 1} attempts: {last_err}")
+
+
 def _fetch_rows_json(dataset: str, config: str, split: str, offset: int, length: int) -> dict:
     """Same API the console itself calls to browse -- but WITH auth, so
     private/gated source datasets work here even though they can't from an
-    unauthenticated browser request."""
-    try:
-        resp = requests.get(
-            HF_ROWS_URL,
-            params={"dataset": dataset, "config": config, "split": split, "offset": offset, "length": length},
-            headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            timeout=30,
-        )
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"datasets-server /rows failed: {e}")
-    return resp.json()
+    unauthenticated browser request. Chunks internally into <=100-row calls
+    and stitches the results together, since datasets-server ignores a
+    larger `length`. This matters well beyond browsing: commit_page() calls
+    this too, and page_size can now be up to 1000 (see review_console.html's
+    PAGE_SIZE selector) -- without chunking here, a 500-row commit would
+    silently only fetch/write the first 100 rows' audio while still marking
+    the full 500 as committed in progress.json, permanently losing the rest.
+
+    The first chunk is fetched alone (cheap, and it tells us num_rows_total
+    so later chunks don't fire pointless past-the-end requests); the rest
+    are fetched in parallel, not one after another -- sequential chunking
+    was the main reason a 1000-row page took noticeably longer than a
+    100-row one."""
+    if length <= 0:
+        return {"rows": [], "num_rows_total": None}
+
+    first_len = min(length, HF_ROWS_MAX_LENGTH)
+    first_data = _fetch_rows_page(dataset, config, split, offset, first_len)
+    all_rows = list(first_data.get("rows", []))
+    num_rows_total = first_data.get("num_rows_total")
+
+    if length <= HF_ROWS_MAX_LENGTH or len(all_rows) < first_len:
+        return {"rows": all_rows, "num_rows_total": num_rows_total}  # fit in one chunk, or already hit the end
+
+    end_bound = offset + length if num_rows_total is None else min(offset + length, num_rows_total)
+    specs = []
+    off = offset + first_len
+    while off < end_bound:
+        chunk_len = min(HF_ROWS_MAX_LENGTH, end_bound - off)
+        specs.append((off, chunk_len))
+        off += chunk_len
+
+    if specs:
+        with ThreadPoolExecutor(max_workers=min(len(specs), 10)) as pool:
+            for data in pool.map(lambda s: _fetch_rows_page(dataset, config, split, s[0], s[1]), specs):
+                all_rows.extend(data.get("rows", []))
+
+    return {"rows": all_rows, "num_rows_total": num_rows_total}
 
 
 def _fetch_features(dataset: str, config: str):
@@ -264,13 +324,25 @@ def _audio_url(value):
     return None
 
 
-def _download_bytes(url: str, timeout: int = 60) -> bytes:
-    try:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {HF_TOKEN}"}, timeout=timeout)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"failed to download audio from {url}: {e}")
-    return resp.content
+def _download_bytes(url: str, timeout: int = 60, retries: int = 2) -> bytes:
+    # A page can now be up to 1000 audio files (see PAGE_SIZE in
+    # review_console.html) -- at that volume, one transient blip shouldn't
+    # fail the whole commit, so retry read-timeout/connection errors same as
+    # _fetch_rows_page above.
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(url, headers={"Authorization": f"Bearer {HF_TOKEN}"}, timeout=timeout)
+            resp.raise_for_status()
+            return resp.content
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(0.75 * (attempt + 1))
+                continue
+        except requests.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"failed to download audio from {url}: {e}")
+    raise HTTPException(status_code=502, detail=f"failed to download audio from {url} after {retries + 1} attempts: {last_err}")
 
 
 def _is_hf_url(url: str) -> bool:
@@ -421,6 +493,7 @@ def commit_page(req: CommitPageRequest, x_review_token: Optional[str] = Header(d
         page = _fetch_rows_json(req.dataset, req.config, req.split, lo, req.page_size).get("rows", [])
         if not page:
             raise HTTPException(status_code=404, detail=f"no rows found at offset {lo} for {req.dataset}")
+
         features = _fetch_features(req.dataset, req.config)
 
         edits = {int(k): v for k, v in req.edits.items()}

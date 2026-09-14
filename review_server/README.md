@@ -96,6 +96,16 @@ intervals collapse into one), so it stays a compact, accurate record of
 exactly which row indices have already been written, no matter how the
 pages committing them lined up.
 
+**Note:** a shard's filename (`train-OFFSET-OFFSET+n-1.parquet`) names the
+*page* that produced it, not a guarantee of exactly which rows are inside —
+a partial-overlap commit (e.g. reviewing at page size 100, then switching
+to 500) can leave a shard with fewer, or non-contiguous, rows than its
+filename's range implies, since the already-covered ones got dropped.
+Row content stays column-identical to the source dataset (no added
+`row_idx` column, to match shards already pushed), so `progress.json`'s
+`committed_ranges` — not the shard's own contents or filename — is the
+authoritative record of which source rows a given commit actually covered.
+
 ## Private / gated source datasets
 
 Mark a language `"private": true` in `languages.json` and the console
