@@ -1,0 +1,48 @@
+name: Deploy to VM
+
+# SECURITY: this repo is public and the runner below is self-hosted on the
+# production VM. Only trigger on a direct push to main -- NEVER add a
+# pull_request trigger here, or anyone opening a PR from a fork could run
+# arbitrary code on the VM. Protect `main` (require PR review before merge)
+# so a malicious push can't slip in either.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "review_server/**"
+      - ".github/workflows/deploy.yml"
+
+concurrency:
+  group: deploy-review-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        working-directory: review_server
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restart service
+        run: sudo systemctl restart 9jalingo-review
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf -o /dev/null http://127.0.0.1:8787/; then
+              echo "service is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "service did not come up in time" >&2
+          sudo systemctl status 9jalingo-review --no-pager || true
+          sudo journalctl -u 9jalingo-review -n 50 --no-pager || true
+          exit 1
