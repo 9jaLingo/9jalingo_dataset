@@ -287,7 +287,7 @@
           <option value="100">100</option>
           <option value="200">200</option>
           <option value="500">500</option>
-          <option value="1000">1000</option>
+          <!-- <option value="1000">1000</option> -->
         </select>
       </label>
       <span id="customLangFields" style="display:none;gap:6px;align-items:center;">
@@ -372,7 +372,7 @@
     igbo:   { label: "Igbo",            dataset: "voicedata/final_igbo",   config: "default", split: "train", text_field: "text", audio_field: "audio", private: true },
     yoruba: { label: "Yoruba",          dataset: "voicedata/final_yoruba", config: "default", split: "train", text_field: "text", audio_field: "audio" },
   };
-  const PAGE_SIZE_OPTIONS = [100, 200, 500, 1000];
+  const PAGE_SIZE_OPTIONS = [100, 200, 500];
   const DEFAULT_PAGE_SIZE = 100;
   // datasets-server's /rows endpoint caps a single call's `length` at 100,
   // no matter what's asked for -- PAGE_SIZE options above 100 are built by

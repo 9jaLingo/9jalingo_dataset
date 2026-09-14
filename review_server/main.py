@@ -223,8 +223,11 @@ def _fetch_rows_page(dataset: str, config: str, split: str, offset: int, length:
     datasets-server can be genuinely slow (not hung) on some dataset/subset
     combos, especially gated ones needing an access check -- 30s was too
     tight and turned ordinary slowness into a hard failure. 60s, plus a
-    couple of quick retries on read-timeout/connection errors specifically
-    (not on a real 4xx from HF, which retrying won't fix)."""
+    couple of quick retries on read-timeout/connection errors and on a
+    5xx from HF itself (a gateway/server error there is almost always
+    transient -- e.g. datasets-server still building the row-preview
+    index for a gated dataset, or its own infra hiccuping). A real 4xx
+    (auth/not-found/bad-request) fails fast since retrying won't fix it."""
     last_err = None
     for attempt in range(retries + 1):
         try:
@@ -241,9 +244,19 @@ def _fetch_rows_page(dataset: str, config: str, split: str, offset: int, length:
             if attempt < retries:
                 time.sleep(0.75 * (attempt + 1))
                 continue
-        except requests.RequestException as e:
-            # A real HTTP error status (4xx/5xx) from HF -- retrying won't help.
+        except requests.HTTPError as e:
+            last_err = e
+            status = e.response.status_code if e.response is not None else None
+            if status and 500 <= status < 600 and attempt < retries:
+                time.sleep(0.75 * (attempt + 1))
+                continue
             raise HTTPException(status_code=502, detail=f"datasets-server /rows failed: {e}")
+        except requests.RequestException as e:
+            # Any other requests-level failure -- treat like a connection error.
+            last_err = e
+            if attempt < retries:
+                time.sleep(0.75 * (attempt + 1))
+                continue
     raise HTTPException(status_code=502, detail=f"datasets-server /rows failed after {retries + 1} attempts: {last_err}")
 
 
@@ -253,7 +266,7 @@ def _fetch_rows_json(dataset: str, config: str, split: str, offset: int, length:
     unauthenticated browser request. Chunks internally into <=100-row calls
     and stitches the results together, since datasets-server ignores a
     larger `length`. This matters well beyond browsing: commit_page() calls
-    this too, and page_size can now be up to 1000 (see review_console.html's
+    this too, and page_size can now be up to 500 (see review_console.html's
     PAGE_SIZE selector) -- without chunking here, a 500-row commit would
     silently only fetch/write the first 100 rows' audio while still marking
     the full 500 as committed in progress.json, permanently losing the rest.
@@ -261,7 +274,7 @@ def _fetch_rows_json(dataset: str, config: str, split: str, offset: int, length:
     The first chunk is fetched alone (cheap, and it tells us num_rows_total
     so later chunks don't fire pointless past-the-end requests); the rest
     are fetched in parallel, not one after another -- sequential chunking
-    was the main reason a 1000-row page took noticeably longer than a
+    was the main reason a 500-row page took noticeably longer than a
     100-row one."""
     if length <= 0:
         return {"rows": [], "num_rows_total": None}
@@ -325,7 +338,7 @@ def _audio_url(value):
 
 
 def _download_bytes(url: str, timeout: int = 60, retries: int = 2) -> bytes:
-    # A page can now be up to 1000 audio files (see PAGE_SIZE in
+    # A page can now be up to 500 audio files (see PAGE_SIZE in
     # review_console.html) -- at that volume, one transient blip shouldn't
     # fail the whole commit, so retry read-timeout/connection errors same as
     # _fetch_rows_page above.
