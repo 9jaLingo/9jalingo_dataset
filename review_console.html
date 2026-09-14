@@ -282,6 +282,14 @@
   <div class="toolbar">
     <div class="toolbar-left">
       <label class="field">language <select id="langSelect"></select></label>
+      <label class="field">rows/page
+        <select id="pageSizeSelect">
+          <option value="100">100</option>
+          <option value="200">200</option>
+          <option value="500">500</option>
+          <option value="1000">1000</option>
+        </select>
+      </label>
       <span id="customLangFields" style="display:none;gap:6px;align-items:center;">
         <input type="text" id="customDataset" placeholder="org/dataset-repo" style="width:180px;">
         <input type="text" id="customConfig" placeholder="config" value="default" style="width:80px;">
@@ -364,10 +372,17 @@
     igbo:   { label: "Igbo",            dataset: "voicedata/final_igbo",   config: "default", split: "train", text_field: "text", audio_field: "audio", private: true },
     yoruba: { label: "Yoruba",          dataset: "voicedata/final_yoruba", config: "default", split: "train", text_field: "text", audio_field: "audio" },
   };
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE_OPTIONS = [100, 200, 500, 1000];
+  const DEFAULT_PAGE_SIZE = 100;
+  // datasets-server's /rows endpoint caps a single call's `length` at 100,
+  // no matter what's asked for -- PAGE_SIZE options above 100 are built by
+  // stitching together multiple 100-row (or smaller) calls, see chunkRanges()
+  // below. This same cap applies server-side (review_server/main.py) too.
+  const HF_ROWS_MAX_LENGTH = 100;
   const ICON_PLAY = `<svg viewBox="0 0 12 12"><polygon points="1,0 11,6 1,12"></polygon></svg>`;
   const ICON_PAUSE = `<svg viewBox="0 0 12 12"><rect x="1" y="0" width="3.4" height="12"></rect><rect x="7.6" y="0" width="3.4" height="12"></rect></svg>`;
 
+  let PAGE_SIZE = DEFAULT_PAGE_SIZE;
   let LANGUAGES = DEFAULT_LANGUAGES;
   let TARGET_REPO_TEMPLATE = DEFAULT_TARGET_REPO_TEMPLATE;
   let confirmedTargetRepo = null;   // exact value, once the backend has told us
@@ -480,6 +495,33 @@
     const firstKey = Object.keys(LANGUAGES)[0];
     return { key: firstKey, ...LANGUAGES[firstKey] };
   }
+
+  function loadPageSize(){
+    let saved = null;
+    try{ saved = parseInt(localStorage.getItem("review-page-size"), 10); }catch(e){}
+    PAGE_SIZE = PAGE_SIZE_OPTIONS.includes(saved) ? saved : DEFAULT_PAGE_SIZE;
+    $("#pageSizeSelect").value = String(PAGE_SIZE);
+  }
+
+  $("#pageSizeSelect").addEventListener("change", async (e)=>{
+    const v = parseInt(e.target.value, 10);
+    if(!PAGE_SIZE_OPTIONS.includes(v)) return;
+    PAGE_SIZE = v;
+    try{ localStorage.setItem("review-page-size", String(v)); }catch(e){}
+    renderMasthead();
+    if(serverUrl){
+      // Land on the first not-yet-committed page at the new size, not just
+      // wherever the old offset happens to fall -- otherwise switching to a
+      // bigger page size can show rows already pushed under the old one as
+      // if nothing had been committed yet.
+      await refreshProgress();
+      goToOffset(firstUncommittedOffset());
+    }else{
+      // No backend configured, so there's no committed-progress to check --
+      // just re-align to a clean boundary for the new size at the current spot.
+      goToOffset(offset - (offset % PAGE_SIZE));
+    }
+  });
 
   function populateLangSelect(){
     const sel = $("#langSelect");
@@ -742,32 +784,62 @@
   }
   $("#btnCommitPage").addEventListener("click", commitPage);
 
+  // The exact first row index not covered by any committed range -- NOT
+  // rounded to a PAGE_SIZE boundary. Landing on the boundary of the first
+  // not-FULLY-committed page was the earlier (buggy) approach: a range like
+  // [600,700) only half-covers a 200-row page starting at 600, so that page
+  // would get flagged "not done" and land you back on rows 600-799, showing
+  // 100 rows you already committed. This instead walks committedRanges
+  // (backend guarantees it sorted + merged, see _merge_ranges in main.py) to
+  // find the true first gap -- 700 in that example, regardless of PAGE_SIZE.
+  // committedRanges must already be up to date (call refreshProgress() first).
+  function firstUncommittedOffset(){
+    let candidate = 0;
+    for(const [lo, hi] of committedRanges){
+      if(lo > candidate) break;   // gap before this range -- candidate is free
+      if(hi > candidate) candidate = hi; // still covered -- skip past this range
+    }
+    return candidate;
+  }
+
   $("#btnResume").addEventListener("click", async ()=>{
     if(!serverUrl){ toast("set a server url first"); return; }
     await refreshProgress();
-    let candidate = 0;
-    const limit = totalRows ?? (candidate + PAGE_SIZE * 500); // sane bound if total unknown yet
-    while(candidate < limit){
-      const covered = committedRanges.some(([lo, hi]) => lo <= candidate && hi >= candidate + PAGE_SIZE);
-      if(!covered) break;
-      candidate += PAGE_SIZE;
-    }
-    goToOffset(candidate);
+    goToOffset(firstUncommittedOffset());
   });
 
   // ---------- fetching rows ----------
-  // `currentLang.private` (from languages.json) is a hint, not the ground truth --
-  // it lets a known-private language skip straight to the backend instead of
-  // wasting a doomed direct attempt. But if a language ISN'T flagged private
-  // and Hugging Face 401s/403s anyway (wrong guess, or a dataset's visibility
-  // changed), fall back to the backend automatically rather than requiring
-  // languages.json to be perfectly accurate for every language up front.
-  async function fetchViaBackend(params){
+  // Splits [offset, offset+length) into <=HF_ROWS_MAX_LENGTH-sized pieces --
+  // needed any time PAGE_SIZE > 100, since a single datasets-server call
+  // can't return more than that regardless of what's asked for.
+  function chunkRanges(offset, length){
+    const ranges = [];
+    for(let o = offset; o < offset + length; o += HF_ROWS_MAX_LENGTH){
+      ranges.push([o, Math.min(HF_ROWS_MAX_LENGTH, offset + length - o)]);
+    }
+    return ranges;
+  }
+
+  function mergeRowChunks(chunks){
+    let rows = [];
+    let num_rows_total;
+    for(const d of chunks){
+      rows = rows.concat((d && d.rows) || []);
+      if(num_rows_total === undefined && d && typeof d.num_rows_total === "number") num_rows_total = d.num_rows_total;
+    }
+    return { rows, num_rows_total };
+  }
+
+  function rowsParams(off, len){
+    return `dataset=${encodeURIComponent(currentLang.dataset)}&config=${encodeURIComponent(currentLang.config)}&split=${encodeURIComponent(currentLang.split)}&offset=${off}&length=${len}`;
+  }
+
+  async function fetchChunkViaBackend(off, len){
     if(!serverUrl){
       throw new Error(`${currentLang.label || currentLang.key} needs authentication to browse (private/gated dataset) — set a server url in the Sync panel first (its backend token can read it; the browser can't on its own)`);
     }
     const res = await fetchWithTimeout(
-      serverUrl.replace(/\/$/, "") + `/api/rows?${params}`,
+      serverUrl.replace(/\/$/, "") + `/api/rows?${rowsParams(off, len)}`,
       { headers: apiHeaders() }, 180000
     );
     if(!res.ok){
@@ -777,24 +849,50 @@
     return res.json();
   }
 
+  // `currentLang.private` (from languages.json) is a hint, not the ground truth --
+  // it lets a known-private language skip straight to the backend instead of
+  // wasting a doomed direct attempt. But if a language ISN'T flagged private
+  // and Hugging Face 401s/403s anyway (wrong guess, or a dataset's visibility
+  // changed), fall back to the backend automatically rather than requiring
+  // languages.json to be perfectly accurate for every language up front.
   async function fetchPage(off){
-    const params = `dataset=${encodeURIComponent(currentLang.dataset)}&config=${encodeURIComponent(currentLang.config)}&split=${encodeURIComponent(currentLang.split)}&offset=${off}&length=${PAGE_SIZE}`;
+    const ranges = chunkRanges(off, PAGE_SIZE);
 
     if(currentLang.private){
-      return fetchViaBackend(params);
+      const chunks = await Promise.all(ranges.map(([o, l]) => fetchChunkViaBackend(o, l)));
+      return mergeRowChunks(chunks);
     }
 
-    const url = `https://datasets-server.huggingface.co/rows?${params}`;
-    const res = await fetchWithTimeout(url, undefined, 180000);
-    if(res.ok) return res.json();
-    if(res.status === 401 || res.status === 403){
-      const data = await fetchViaBackend(params); // throws its own clear error if no server is set
+    // Probe with just the first chunk direct-to-HF; a 401/403 there means
+    // every other chunk would fail the same way, so only then fall back
+    // (and flip `private` for the rest of this session) instead of firing
+    // every chunk in parallel and discovering the failure N times over.
+    const [firstOff, firstLen] = ranges[0];
+    const firstRes = await fetchWithTimeout(
+      `https://datasets-server.huggingface.co/rows?${rowsParams(firstOff, firstLen)}`, undefined, 180000
+    );
+    if(firstRes.status === 401 || firstRes.status === 403){
       currentLang.private = true; // remember for the rest of this session -- skip the wasted direct attempt on future pages
       renderMasthead();
-      return data;
+      const chunks = await Promise.all(ranges.map(([o, l]) => fetchChunkViaBackend(o, l)));
+      return mergeRowChunks(chunks);
     }
-    const body = await res.text().catch(()=> "");
-    throw new Error(`HF datasets-server returned ${res.status}: ${body.slice(0,200)}`);
+    if(!firstRes.ok){
+      const body = await firstRes.text().catch(()=> "");
+      throw new Error(`HF datasets-server returned ${firstRes.status}: ${body.slice(0,200)}`);
+    }
+    const firstData = await firstRes.json();
+    if(ranges.length === 1) return firstData;
+
+    const restChunks = await Promise.all(ranges.slice(1).map(async ([o, l]) => {
+      const res = await fetchWithTimeout(`https://datasets-server.huggingface.co/rows?${rowsParams(o, l)}`, undefined, 180000);
+      if(!res.ok){
+        const body = await res.text().catch(()=> "");
+        throw new Error(`HF datasets-server returned ${res.status} for offset ${o}: ${body.slice(0,200)}`);
+      }
+      return res.json();
+    }));
+    return mergeRowChunks([firstData, ...restChunks]);
   }
 
   function proxiedAssetUrl(rawUrl){
@@ -1036,12 +1134,15 @@
     confirmedTargetRepo = null;
     renderMasthead();
     loadManifestForCurrentLang();
-    // Run these concurrently, not sequentially -- rows must load even if the
-    // sync backend is slow, unreachable, or was never configured. refreshProgress
-    // has its own timeout+catch, so a bad server URL only delays the "synced"
-    // badges, never the page itself (except for `private` languages, where
-    // fetchPage itself needs the backend and says so clearly if it's missing).
-    await Promise.all([refreshProgress(), goToOffset(0)]);
+    // Progress has to be known before picking where to land, so this can't
+    // just fire goToOffset(0) concurrently anymore -- otherwise it'd show
+    // already-committed rows as if nothing had been done yet, no matter what
+    // page size is selected. refreshProgress still has its own bounded
+    // timeout+catch (6s), so a slow/unreachable backend delays this by at
+    // most that, never hangs indefinitely -- it just falls back to offset 0.
+    await refreshProgress();
+    const startOffset = serverUrl ? firstUncommittedOffset() : 0;
+    await goToOffset(startOffset);
   }
 
   // ---------- manual export ----------
@@ -1152,6 +1253,7 @@ print(f"pushed to https://huggingface.co/datasets/{TARGET_REPO}")
       // languages.json not reachable (e.g. opened as a bare file://) — fall back to defaults baked into this file
     }
     populateLangSelect();
+    loadPageSize();
     loadConnection();
     await loadRemoteConfig(); // prefer the backend's own template over languages.json's copy, if reachable
     const lang = resolveLanguageFromUrl();

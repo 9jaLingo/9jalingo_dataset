@@ -29,10 +29,25 @@ automatically from the language key, nothing to configure per language.
 per language is simpler still and avoids that branch inheriting the
 source repo's full history.)
 
-**Page size is 100**, matching your follow-up message — and it's a
-constant, not a UI setting, because a shard's filename encodes its row
-range (`train-000000-000099.parquet`); changing page size mid-review would
-misalign shards with already-committed ranges.
+**Page size defaults to 100, selectable up to 1000** (100/200/500/1000, in
+the toolbar) — this was originally a hardcoded constant on the theory that
+a shard's filename (`train-000000-000099.parquet`) encoding its row range
+made a variable size risky. It isn't, in practice: `committed_ranges` was
+already tracked as arbitrary merge-able intervals (see "Duplicate
+protection" in `review_server/README.md`), not fixed-size slots, so
+changing page size — even mid-review — doesn't misalign anything.
+
+The real constraint turned out to be elsewhere: Hugging Face's
+`datasets-server` `/rows` API caps a single call's `length` at 100 no
+matter what's requested. A page size above 100 is built by chunking into
+multiple ≤100-row calls and stitching the results together — done in the
+browser (`chunkRanges`/`mergeRowChunks` in `review_console.html`) for
+browsing, and *separately* in the backend (`_fetch_rows_json` in
+`main.py`) for both its own `/api/rows` proxy and — critically —
+`commit_page`, since that's what actually fetches and writes shard audio.
+Missing the backend side of this would have been silent data loss: a
+500-row commit would fetch/write only the first 100 rows while still
+recording the full 500 as committed in `progress.json`.
 
 **One flexible console, not one file per language.** It's one HTML file,
 parameterized by `languages.json` + URL params. Share
